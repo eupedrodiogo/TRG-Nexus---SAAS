@@ -179,6 +179,88 @@ const SettingsView: React.FC = () => {
     }
   });
 
+  // --- RESTORED STATE & HELPERS ---
+
+  const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
+  const showNotification = (msg: string, type: 'success' | 'error' = 'success') => {
+    setNotification({ message: msg, type });
+    setTimeout(() => setNotification(null), 3000);
+  };
+
+  const weekDays = [
+    { val: 'seg', label: 'Segunda-feira' },
+    { val: 'ter', label: 'Terça-feira' },
+    { val: 'qua', label: 'Quarta-feira' },
+    { val: 'qui', label: 'Quinta-feira' },
+    { val: 'sex', label: 'Sexta-feira' },
+    { val: 'sab', label: 'Sábado' },
+    { val: 'dom', label: 'Domingo' }
+  ];
+
+  const [blockedTimes, setBlockedTimes] = useState([
+    { id: 1, dayOfWeek: 'seg', startTime: '12:00', endTime: '13:00', label: 'Almoço' },
+    { id: 2, dayOfWeek: 'qua', startTime: '08:00', endTime: '10:00', label: 'Reunião Clínica' }
+  ]);
+
+  const [newBlock, setNewBlock] = useState({ day: 'seg', start: '', end: '', label: '' });
+
+  const addBlockedTime = () => {
+    if (!newBlock.start || !newBlock.end) return;
+    setBlockedTimes([...blockedTimes, { id: Date.now(), dayOfWeek: newBlock.day, startTime: newBlock.start, endTime: newBlock.end, label: newBlock.label }]);
+    setNewBlock({ day: 'seg', start: '', end: '', label: '' });
+    showNotification('Bloqueio adicionado com sucesso!');
+  };
+
+  const removeBlockedTime = (id: number) => {
+    setBlockedTimes(blockedTimes.filter(b => b.id !== id));
+    showNotification('Bloqueio removido.');
+  };
+
+  const [integrations, setIntegrations] = useState({
+    googleCalendar: true,
+    zoom: false,
+    stripe: true
+  });
+
+  const [whatsappTemplate, setWhatsappTemplate] = useState("Olá {paciente}, confirmando sua sessão de TRG para {data} às {hora}.");
+
+  // Help Center State
+  const [helpView, setHelpView] = useState<'home' | 'article' | 'guide' | 'ticket'>('home');
+  const [helpSearch, setHelpSearch] = useState('');
+  const [selectedArticle, setSelectedArticle] = useState<any>(null);
+  const [guideSection, setGuideSection] = useState('intro');
+  const [supportForm, setSupportForm] = useState({ category: 'duvida', priority: 'normal', subject: '', message: '' });
+
+  const HELP_ARTICLES = [
+    { id: 1, title: 'Como configurar minha agenda?', category: 'Agenda', content: 'Para configurar sua agenda...' },
+    { id: 2, title: 'Integração com Google Agenda', category: 'Integrações', content: 'Vá em configurações > integrações...' },
+    { id: 3, title: 'Como emitir notas fiscais?', category: 'Financeiro', content: 'O sistema gera recibos simples...' },
+  ];
+
+  const SYSTEM_GUIDE = {
+    intro: { title: 'Bem-vindo ao TRG Nexus', content: 'Visão geral do sistema.' },
+    profile: { title: 'Configurando seu Perfil', content: 'Como deixar seu perfil atrativo.' },
+    financial: { title: 'Gestão Financeira', content: 'Controle de pagamentos e recebimentos.' }
+  };
+
+  const handleExportData = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(formData));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", "meus_dados_trg.json");
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+    showNotification('Exportação iniciada!');
+  };
+
+  const handleSendSupport = () => {
+    showNotification('Ticket enviado! Entraremos em contato em breve.');
+    setSupportForm({ category: 'duvida', priority: 'normal', subject: '', message: '' });
+    setTimeout(() => setHelpView('home'), 1500);
+  };
+
+
   // ...
 
   const menuItems = [
