@@ -54,6 +54,20 @@ import { createClient } from '@supabase/supabase-js';
 
 // ... (Inside Component)
 
+// Helper Component: Toggle Switch
+const ToggleSwitch = ({ checked, onChange }: { checked: boolean; onChange: () => void }) => (
+  <button
+    onClick={onChange}
+    className={`w-12 h-6 rounded-full p-1 transition-colors duration-200 ease-in-out ${checked ? 'bg-primary-500' : 'bg-slate-300 dark:bg-slate-700'
+      }`}
+  >
+    <div
+      className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-200 ease-in-out ${checked ? 'translate-x-6' : 'translate-x-0'
+        }`}
+    />
+  </button>
+);
+
 const SettingsView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'profile' | 'clinic' | 'financial' | 'integrations' | 'schedule' | 'security' | 'notifications' | 'help' | 'network'>('profile');
 
