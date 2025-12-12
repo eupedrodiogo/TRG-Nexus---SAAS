@@ -214,8 +214,87 @@ const SystemTest: React.FC = () => {
                             </p>
                         </div>
                     )}
+                    )}
                 </div>
             </div>
+
+            {/* STRIPE TEST CARD */}
+            <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-3xl shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden mt-6">
+                <div className="p-8 pb-0">
+                    <div className="w-16 h-16 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-2xl flex items-center justify-center mb-6 shadow-sm">
+                        <span className="font-bold text-xl">$</span>
+                    </div>
+                    <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
+                        Teste de Stripe
+                    </h1>
+                    <p className="text-slate-500 dark:text-slate-400">
+                        Verifique se a chave de API do Stripe está configurada corretamente no servidor.
+                    </p>
+                </div>
+
+                <div className="p-8">
+                    <StripeTestBlock />
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const StripeTestBlock = () => {
+    const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+    const [message, setMessage] = useState('');
+
+    const runTest = async () => {
+        setStatus('loading');
+        setMessage('');
+        try {
+            const res = await fetch('/api/payments?action=check', { method: 'POST' });
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(text || res.statusText);
+            }
+            const data = await res.json();
+            setStatus('success');
+            setMessage(data.message || 'Conexão Stripe OK!');
+        } catch (e: any) {
+            setStatus('error');
+            setMessage(e.message || 'Erro de conexão');
+        }
+    };
+
+    return (
+        <div>
+            <button
+                onClick={runTest}
+                disabled={status === 'loading'}
+                className="w-full py-3.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl shadow-lg shadow-purple-500/20 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+                {status === 'loading' ? (
+                    <>
+                        <Loader2 size={20} className="animate-spin" />
+                        Verificando...
+                    </>
+                ) : (
+                    <>
+                        Testar Conexão
+                        <ArrowRight size={20} />
+                    </>
+                )}
+            </button>
+
+            {status === 'success' && (
+                <div className="mt-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800 rounded-xl flex items-start gap-3 animate-fade-in">
+                    <CheckCircle size={20} className="text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
+                    <p className="text-sm text-green-700 dark:text-green-300 font-medium">{message}</p>
+                </div>
+            )}
+
+            {status === 'error' && (
+                <div className="mt-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-xl flex items-start gap-3 animate-fade-in">
+                    <AlertTriangle size={20} className="text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                    <p className="text-sm text-red-700 dark:text-red-300 font-medium break-all">{message}</p>
+                </div>
+            )}
         </div>
     );
 };

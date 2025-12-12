@@ -56,6 +56,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return res.status(200).json({ clientSecret: paymentIntent.client_secret });
         }
 
+        else if (action === 'check') {
+            return res.status(200).json({ status: 'ok', message: 'Stripe Configured Correctly' });
+        }
+
         else {
             return res.status(400).json({ error: 'Invalid action' });
         }
