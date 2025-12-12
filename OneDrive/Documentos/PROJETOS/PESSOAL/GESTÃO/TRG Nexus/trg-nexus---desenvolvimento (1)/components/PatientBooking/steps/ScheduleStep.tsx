@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar as CalendarIcon, Clock, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, ChevronLeft, ChevronRight, Loader2, Users } from 'lucide-react';
+import { PartnerMatcher } from '../PartnerMatcher';
 
 interface ScheduleStepProps {
     data: any;
@@ -18,6 +19,7 @@ const ScheduleStep: React.FC<ScheduleStepProps> = ({ data, onUpdate, onNext, onB
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [isPartnerMatcherOpen, setIsPartnerMatcherOpen] = useState(false);
 
     useEffect(() => {
         const fetchAvailability = async () => {
@@ -154,6 +156,23 @@ const ScheduleStep: React.FC<ScheduleStepProps> = ({ data, onUpdate, onNext, onB
                             ))}
                         </div>
                     )}
+
+                    {/* Partner Matcher Trigger */}
+                    <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-800">
+                        <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-xl border border-indigo-100 dark:border-indigo-800 flex items-center justify-between gap-4">
+                            <div>
+                                <h4 className="font-bold text-indigo-900 dark:text-indigo-100 text-sm">Não encontrou um horário?</h4>
+                                <p className="text-xs text-indigo-700 dark:text-indigo-300">Nossa rede de parceiros certificados pode ter disponibilidade.</p>
+                            </div>
+                            <button
+                                onClick={() => setIsPartnerMatcherOpen(true)}
+                                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-lg shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-2 whitespace-nowrap"
+                            >
+                                <Users size={16} />
+                                Encontrar Parceiro
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -172,6 +191,16 @@ const ScheduleStep: React.FC<ScheduleStepProps> = ({ data, onUpdate, onNext, onB
                     Ir para Pagamento
                 </button>
             </div>
+
+            {isPartnerMatcherOpen && (
+                <PartnerMatcher
+                    sourceTherapistId={data.therapistId}
+                    onClose={() => setIsPartnerMatcherOpen(false)}
+                    onSelectPartner={(partnerId) => {
+                        window.location.href = `/agendar/${partnerId}`;
+                    }}
+                />
+            )}
         </div>
     );
 };

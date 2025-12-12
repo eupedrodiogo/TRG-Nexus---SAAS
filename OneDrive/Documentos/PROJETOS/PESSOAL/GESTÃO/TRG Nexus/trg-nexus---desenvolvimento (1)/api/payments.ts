@@ -21,9 +21,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
         const stripe = getStripe();
         if (action === 'checkout') {
-            const { priceId, successUrl, cancelUrl } = req.body;
+            const { priceId, successUrl, cancelUrl, mode = 'payment', couponId } = req.body;
 
-            const session = await stripe.checkout.sessions.create({
+            const sessionParams: Stripe.Checkout.SessionCreateParams = {
                 payment_method_types: ['card'],
                 line_items: [
                     {
@@ -31,10 +31,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         quantity: 1,
                     },
                 ],
-                mode: 'payment',
+                mode: mode as Stripe.Checkout.Session.Mode,
                 success_url: successUrl,
                 cancel_url: cancelUrl,
-            });
+            };
+
+            if (couponId) {
+                sessionParams.discounts = [{ coupon: couponId }];
+            }
+
+            const session = await stripe.checkout.sessions.create(sessionParams);
 
             return res.status(200).json({ id: session.id, url: session.url });
         }

@@ -1,153 +1,135 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import pg from 'pg';
+import { createClient } from '@supabase/supabase-js';
 import { sendBookingNotification } from './_utils/notifications';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-    const { Pool } = pg;
+// Initialize Supabase Admin Client (Service Role)
+// This is required to perform actions on behalf of the user or public actions that modify restricted tables.
+const supabaseUrl = process.env.VITE_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    const envCheck = {
-        hasUrl: !!process.env.POSTGRES_URL || !!process.env.trgnexus_POSTGRES_URL,
-        nodeEnv: process.env.NODE_ENV,
-    };
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+    if (req.method !== 'POST') {
+        return res.status(405).json({ error: 'Method not allowed' });
+    }
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+        return res.status(500).json({
+            error: 'Server Misconfiguration',
+            details: 'Missing Supabase URL or Service Role Key'
+        });
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    const { name, email, phone, date, time, therapistId, ...anamnesisData } = req.body || {};
+
+    if (!name || !email || !date || !time) {
+        return res.status(400).json({ error: 'Missing required fields' });
+    }
 
     try {
-        let connectionString = process.env.trgnexus_POSTGRES_URL || process.env.POSTGRES_URL;
+        // 1. Fetch Therapist Details
+        let therapistName = 'Terapeuta TRG';
+        let therapistEmail = null;
 
-        if (connectionString && connectionString.includes('?sslmode=require')) {
-            connectionString = connectionString.replace('?sslmode=require', '?');
+        if (therapistId) {
+            const { data: therapist, error: tError } = await supabase
+                .from('therapists')
+                .select('name, email')
+                .eq('id', therapistId)
+                .single();
+
+            if (!tError && therapist) {
+                therapistName = therapist.name;
+                therapistEmail = therapist.email;
+            }
         }
 
-        if (!connectionString) {
-            return res.status(500).json({ status: 'error', message: 'Missing Database URL', env: envCheck });
-        }
+        // 2. Handle Patient (Upsert)
+        // Check if patient exists by email (for this therapist?)
+        // In this multi-tenant model, patients are scoped to therapists.
+        // But for public booking, if I book with Therapist A, I am Patient of Therapist A.
+        // If I try to book with Therapist A again, I should be found.
 
-        const pool = new Pool({
-            connectionString,
-            ssl: { rejectUnauthorized: false },
-            connectionTimeoutMillis: 5000,
-        });
+        let patientId;
 
-        const client = await pool.connect();
-        console.log('Connected to DB');
+        // Try to find existing patient for this therapist
+        const { data: existingPatients } = await supabase
+            .from('patients')
+            .select('id')
+            .eq('email', email)
+            .eq('therapist_id', therapistId) // patient is unique per therapist
+            .limit(1);
 
-        try {
-            if (req.method !== 'POST') {
-                return res.status(405).json({ error: 'Method not allowed' });
-            }
-
-            const { name, email, phone, date, time, therapistId, ...anamnesisData } = req.body || {};
-
-            if (!name || !email || !date || !time) {
-                console.error('Missing fields:', { name, email, date, time });
-                return res.status(400).json({ error: 'Missing required fields' });
-            }
-
-            // Format anamnesis data for storage
-            const anamnesisString = JSON.stringify(anamnesisData, null, 2);
-            const mainComplaint = anamnesisData.queixaPrincipal || 'Não informado';
-
-            // Fetch Therapist Details
-            let therapistName = 'Terapeuta TRG';
-            let therapistEmail = null;
-
-            if (therapistId) {
-                const therapistResult = await client.query(
-                    'SELECT name, email FROM therapists WHERE id = $1',
-                    [therapistId]
-                );
-                if (therapistResult.rows.length > 0) {
-                    therapistName = therapistResult.rows[0].name;
-                    therapistEmail = therapistResult.rows[0].email;
-                }
-            }
-
-            await client.query('BEGIN');
-
-            const patientCheck = await client.query('SELECT id FROM patients WHERE email = $1', [email]);
-            let patientId;
-
-            if (patientCheck.rows.length > 0) {
-                patientId = patientCheck.rows[0].id;
-                await client.query(
-                    'UPDATE patients SET name = $1, phone = $2 WHERE id = $3',
-                    [name, phone, patientId]
-                );
-            } else {
-                const newPatient = await client.query(
-                    `INSERT INTO patients (name, email, phone, status, notes, therapist_id)
-             VALUES ($1, $2, $3, 'Ativo', $4, $5)
-             RETURNING id`,
-                    [name, email, phone, `Queixa Principal: ${mainComplaint}`, therapistId || null]
-                );
-                patientId = newPatient.rows[0].id;
-            }
-
-            // 2. Create Appointment
-            await client.query(
-                `INSERT INTO appointments (patient_id, date, time, status, type, notes, therapist_id)
-           VALUES ($1, $2, $3, 'Agendado', 'Primeira Consulta', $4, $5)`,
-                [
-                    patientId,
-                    date,
-                    time,
-                    anamnesisString,
-                    therapistId || null
-                ]
-            );
-
-            // 3. Create Notification for Therapist
-            if (therapistId) {
-                await client.query(
-                    `INSERT INTO notifications (recipient_id, recipient_role, title, message, type)
-                     VALUES ($1, 'therapist', $2, $3, 'info')`,
-                    [
-                        therapistId,
-                        'Novo Agendamento',
-                        `${name} agendou uma sessão para ${date} às ${time}.`
-                    ]
-                );
-            }
-
-            await client.query('COMMIT');
-
-            // Send Notifications (Async - don't block response)
-            let emailDebug = { status: 'skipped', error: null as any, info: null as any };
-            try {
-                // Get origin from request headers or default to production
-                const requestOrigin = req.headers.origin || '';
-                const origin = requestOrigin.includes('localhost') ? requestOrigin : 'https://traeegnimsqa.vercel.app';
-
-                const result = await sendBookingNotification({
+        if (existingPatients && existingPatients.length > 0) {
+            patientId = existingPatients[0].id;
+            // Update details
+            await supabase
+                .from('patients')
+                .update({ name, phone })
+                .eq('id', patientId);
+        } else {
+            // Create new patient
+            const { data: newPatient, error: pError } = await supabase
+                .from('patients')
+                .insert({
                     name,
                     email,
                     phone,
-                    date,
-                    time,
-                    therapistName,
-                    therapistEmail,
-                    mainComplaint
-                });
-                emailDebug = result;
-            } catch (notifyError) {
-                console.error('Notification Error:', notifyError);
-                emailDebug = { status: 'failed', error: notifyError, info: null };
-            }
+                    therapist_id: therapistId,
+                    status: 'active',
+                    notes: `Queixa Principal: ${anamnesisData.queixaPrincipal || 'Não informado'}`
+                })
+                .select('id')
+                .single();
 
-            res.status(200).json({ message: 'Booking confirmed', patientId, emailDebug });
-        } catch (error: any) {
-            await client.query('ROLLBACK');
-            console.error('Transaction Error:', error);
-            res.status(500).json({ error: error.message });
-        } finally {
-            client.release();
-            await pool.end();
+            if (pError) throw pError;
+            patientId = newPatient.id;
         }
-    } catch (error: any) {
-        console.error('Health DB Error:', error);
-        res.status(500).json({
-            status: 'error',
-            message: error.message,
-            stack: error.stack
+
+        // 3. Create Appointment
+        const { error: aError } = await supabase
+            .from('appointments')
+            .insert({
+                patient_id: patientId,
+                therapist_id: therapistId,
+                date,
+                time,
+                status: 'scheduled',
+                type: 'Primeira Consulta',
+                notes: JSON.stringify(anamnesisData, null, 2)
+            });
+
+        if (aError) throw aError;
+
+        // 4. Send Notifications (Async)
+        // Note: Using Service Role allows us to insert notifications if we have a table for it, 
+        // but currently we might just send email.
+
+        // (Optional) DB Notification
+        /*
+        await supabase.from('notifications').insert({
+             recipient_id: therapistId,
+             title: 'Novo Agendamento',
+             message: `${name} agendou para ${date} às ${time}`
         });
+        */
+
+        const emailResult = await sendBookingNotification({
+            name,
+            email,
+            phone,
+            date,
+            time,
+            therapistName,
+            therapistEmail,
+            mainComplaint: anamnesisData.queixaPrincipal
+        });
+
+        return res.status(200).json({ message: 'Booking confirmed', patientId, emailResult });
+
+    } catch (error: any) {
+        console.error('Booking Error:', error);
+        return res.status(500).json({ error: error.message });
     }
 }

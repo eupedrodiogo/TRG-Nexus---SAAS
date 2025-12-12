@@ -30,6 +30,67 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, isDarkMode, tog
     }
   };
 
+  const handleCheckout = async (priceId: string, mode: 'payment' | 'subscription', couponId?: string) => {
+    try {
+      if (priceId.includes('WAITING_FOR_USER')) {
+        alert('Configuração pendente: STRIPE_SECRET_KEY ausente ou produtos não criados.');
+        return;
+      }
+
+      let btnId = 'btn-subscribe-pro';
+      if (priceId === 'price_1ScuH5KPo7EypB7VQ7epTjiW') btnId = 'btn-subscribe-estagio';
+      else if (priceId === 'price_1ScuH5KPo7EypB7VnIs6qfbQ') btnId = 'btn-subscribe-starter';
+      else if (priceId === 'price_1Sd8DXKPo7EypB7VeUWX8m7L') btnId = 'btn-subscribe-starter'; // Ensure ID mapping if needed
+      else if (priceId === 'price_1Sd8DXKPo7EypB7VZwytTUEP') btnId = 'btn-subscribe-pro'; // Ensure ID mapping if needed
+
+      const btn = document.getElementById(btnId);
+      if (btn) {
+        btn.innerText = 'Redirecionando...';
+        btn.setAttribute('disabled', 'true');
+      }
+
+      const response = await fetch('/api/payments?action=checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          priceId,
+          mode,
+          couponId,
+          successUrl: window.location.origin + '/success?price_id=' + priceId,
+          cancelUrl: window.location.origin + '/'
+        })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({ message: 'Erro desconhecido no servidor' }));
+        throw new Error(errData.message || `Erro ${response.status}: Falha no checkout`);
+      }
+
+      const data = await response.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error('URL de checkout não recebida');
+      }
+    } catch (e: any) {
+      console.error('Checkout Error:', e);
+      alert(`Erro: ${e.message || 'Erro de conexão.'}`);
+      // Reset button state (simplified)
+      const btns = document.querySelectorAll('button');
+      btns.forEach(b => {
+        if (b.innerText === 'Redirecionando...') {
+          // Restore original text based on ID or simplistic check
+          if (b.id === 'btn-subscribe-estagio') b.innerText = 'Começar';
+          else if (b.id === 'btn-subscribe-starter') b.innerText = 'Começar Agora';
+          else if (b.id === 'btn-subscribe-pro') b.innerText = 'Assinar Agora';
+          else b.innerText = 'Assinar';
+
+          b.removeAttribute('disabled');
+        }
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-white font-sans selection:bg-primary-500 selection:text-white overflow-x-hidden">
 
@@ -237,62 +298,42 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, isDarkMode, tog
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
+            {/* Estágio */}
+            <div className="bg-slate-950 p-6 rounded-3xl border border-slate-800 flex flex-col hover:border-slate-600 transition-colors">
+              <h3 className="text-xl font-bold text-slate-200 mb-2">Estágio</h3>
+              <p className="text-slate-400 text-xs mb-6 font-medium">Para estudantes (Ambiente de Teste).</p>
+              <div className="mb-6">
+                <span className="text-4xl font-extrabold text-white">R$ 0,50</span>
+                <span className="text-slate-500 text-sm font-medium">/único</span>
+              </div>
+              <button
+                onClick={() => handleCheckout('price_1ScuH5KPo7EypB7VQ7epTjiW', 'payment')}
+                id="btn-subscribe-estagio"
+                className="w-full py-3 rounded-xl border border-slate-700 text-white font-bold hover:bg-slate-800 transition-all mb-6 text-base"
+              >
+                Testar Agora
+              </button>
+            </div>
+
             {/* Starter */}
             <div className="bg-slate-950 p-8 rounded-3xl border border-slate-800 flex flex-col hover:border-slate-600 transition-colors">
               <h3 className="text-2xl font-bold text-slate-200 mb-2">Iniciante</h3>
-              <p className="text-slate-400 text-sm mb-8 font-medium">Para quem está começando.</p>
+              <p className="text-slate-400 text-sm mb-8 font-medium">Para quem está começando (Ambiente de Teste).</p>
               <div className="mb-8">
-                <span className="text-5xl font-extrabold text-white">R$ 47</span>
-                <span className="text-slate-500 text-xl font-medium">/mês</span>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-4xl font-extrabold text-white">R$ 0,50</span>
+                  <span className="text-green-400 text-xs font-bold bg-green-900/30 px-2 py-1 rounded-full">Oferta Teste</span>
+                </div>
+                <p className="text-slate-500 text-sm mt-1">Pagamento Único</p>
               </div>
               <button
-                onClick={async () => {
-                  try {
-                    const btn = document.getElementById('btn-subscribe-starter');
-                    if (btn) {
-                      btn.innerText = 'Redirecionando...';
-                      btn.setAttribute('disabled', 'true');
-                    }
-
-                    // TODO: Replace with real Stripe Price IDs from your dashboard
-                    const priceId = 'price_1Q...starter';
-
-                    const response = await fetch('/api/payments?action=checkout', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        priceId,
-                        successUrl: window.location.origin + '/success',
-                        cancelUrl: window.location.origin + '/'
-                      })
-                    });
-
-                    if (!response.ok) {
-                      const errData = await response.json().catch(() => ({ message: 'Erro desconhecido no servidor' }));
-                      throw new Error(errData.message || `Erro ${response.status}: Falha no checkout`);
-                    }
-
-                    const data = await response.json();
-                    if (data.url) {
-                      window.location.href = data.url;
-                    } else {
-                      throw new Error('URL de checkout não recebida');
-                    }
-                  } catch (e: any) {
-                    console.error('Checkout Error:', e);
-                    alert(`Erro: ${e.message || 'Erro de conexão.'}`);
-                    const btn = document.getElementById('btn-subscribe-starter');
-                    if (btn) {
-                      btn.innerText = 'Começar Agora';
-                      btn.removeAttribute('disabled');
-                    }
-                  }
-                }}
+                // price_1Sd8DXKPo7EypB7VeUWX8m7L corresponds to 0.50 Iniciante
+                onClick={() => handleCheckout('price_1Sd8DXKPo7EypB7VeUWX8m7L', 'payment')}
                 id="btn-subscribe-starter"
                 className="w-full py-4 rounded-xl border-2 border-slate-700 text-white font-bold hover:bg-slate-800 hover:border-slate-600 transition-all mb-8 text-lg"
               >
-                Começar Agora
+                Testar Agora
               </button>
               <ul className="space-y-5 flex-1">
                 {['Até 10 Clientes', 'Agenda Básica', 'Prontuário Simples', 'Suporte por Email'].map((feat, i) => (
@@ -309,57 +350,18 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, isDarkMode, tog
                 Mais Popular
               </div>
               <h3 className="text-2xl font-bold text-white mb-2">Profissional</h3>
-              <p className="text-primary-200 text-sm mb-8 font-medium">Para terapeutas em crescimento.</p>
+              <p className="text-primary-200 text-sm mb-8 font-medium">Para terapeutas em crescimento (Ambiente de Teste).</p>
               <div className="mb-8">
-                <span className="text-5xl font-extrabold text-white">R$ 97</span>
-                <span className="text-slate-400 text-xl font-medium">/mês</span>
+                <span className="text-5xl font-extrabold text-white">R$ 0,50</span>
+                <span className="text-slate-400 text-xl font-medium">/único</span>
               </div>
               <button
-                onClick={async () => {
-                  try {
-                    const btn = document.getElementById('btn-subscribe-pro');
-                    if (btn) {
-                      btn.innerText = 'Redirecionando...';
-                      btn.setAttribute('disabled', 'true');
-                    }
-                    // TODO: Replace with real Stripe Price ID for Pro plan
-                    const priceId = 'price_1Q...pro';
-
-                    const response = await fetch('/api/payments?action=checkout', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        priceId,
-                        successUrl: window.location.origin + '/success',
-                        cancelUrl: window.location.origin + '/'
-                      })
-                    });
-
-                    if (!response.ok) {
-                      const errData = await response.json().catch(() => ({ message: 'Erro desconhecido no servidor' }));
-                      throw new Error(errData.message || `Erro ${response.status}: Falha no checkout`);
-                    }
-
-                    const data = await response.json();
-                    if (data.url) {
-                      window.location.href = data.url;
-                    } else {
-                      throw new Error('URL de checkout não recebida');
-                    }
-                  } catch (e: any) {
-                    console.error('Checkout Error:', e);
-                    alert(`Erro: ${e.message || 'Erro de conexão.'}`);
-                    const btn = document.getElementById('btn-subscribe-pro');
-                    if (btn) {
-                      btn.innerText = 'Assinar Agora';
-                      btn.removeAttribute('disabled');
-                    }
-                  }
-                }}
+                // price_1Sd8DXKPo7EypB7VZwytTUEP corresponds to 0.50 Profissional
+                onClick={() => handleCheckout('price_1Sd8DXKPo7EypB7VZwytTUEP', 'payment')}
                 id="btn-subscribe-pro"
                 className="w-full py-4 rounded-xl bg-primary-600 text-white font-bold hover:bg-primary-500 transition-all mb-8 shadow-lg hover:shadow-primary-500/40 text-lg ring-offset-2 ring-offset-slate-900 focus:ring-2 focus:ring-primary-500 disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                Assinar Agora
+                Testar Agora
               </button>
               <ul className="space-y-5 flex-1">
                 {['Clientes Ilimitados', 'Protocolos TRG Completos', 'Financeiro + Recibos', 'Relatórios com IA', 'Suporte Prioritário'].map((feat, i) => (

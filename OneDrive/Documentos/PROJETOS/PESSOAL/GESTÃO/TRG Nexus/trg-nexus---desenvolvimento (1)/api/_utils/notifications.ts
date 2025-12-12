@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import twilio from 'twilio';
 
 interface BookingNotificationData {
     name: string;
@@ -17,23 +18,31 @@ export async function sendBookingNotification(data: BookingNotificationData) {
     let result = { status: 'pending', error: null, info: null };
 
 
-    // 1. Email Notification
+    // 1. Email Notification - Setup Transporter
     try {
-        // Check for SMTP credentials
         if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
-            console.warn('SMTP credentials not found. Skipping email sending. (Check SMTP_HOST, SMTP_USER, SMTP_PASS)');
+            console.warn('SMTP credentials not found. Skipping email sending.');
             result.status = 'skipped_no_credentials';
         } else {
+            const port = Number(process.env.SMTP_PORT) || 587;
+            const host = (process.env.SMTP_HOST || '').trim();
+            const user = (process.env.SMTP_USER || '').trim();
+            const pass = (process.env.SMTP_PASS || '').trim();
+
             const transporter = nodemailer.createTransport({
-                host: process.env.SMTP_HOST,
-                port: Number(process.env.SMTP_PORT) || 587,
-                secure: false, // true for 465, false for other ports
+                host: host,
+                port: port,
+                secure: port === 465, // True for 465, false for other ports
                 auth: {
-                    user: process.env.SMTP_USER,
-                    pass: process.env.SMTP_PASS,
+                    user: user,
+                    pass: pass,
                 },
             });
 
+            // Verify connection (optional, but good for debugging logs)
+            // await transporter.verify(); 
+
+            // Send Client Email
             const mailOptions = {
                 from: '"TRG Nexus" <noreply@trgnexus.com>',
                 to: data.email,
@@ -71,36 +80,12 @@ export async function sendBookingNotification(data: BookingNotificationData) {
             };
 
             const info = await transporter.sendMail(mailOptions);
-            console.log('Email sent:', info.messageId);
+            console.log('Client Email sent:', info.messageId);
             result.status = 'sent';
             result.info = info as any;
-        }
-    } catch (error: any) {
-        console.error('Error sending email:', error);
-        result.status = 'error';
-        result.error = error.message || error;
-    }
 
-    // 1.5. Therapist Email (New Appointment Alert)
-    if (data.therapistEmail) {
-        try {
-            // Re-create transporter if needed or reuse if scoped higher (in this fn, we create it inside the try/catch block above, so we might need to restructure or create a new one. 
-            // For simplicity and safety given the previous block structure, I'll create a new transporter check here or ideally verify if I can reuse.
-            // Looking at the code, 'transporter' is scoped to the 'else' block of client email. 
-            // Better to instantiate it once at the top if possible, or just repeat the creation for robust isolation.
-            // Let's copy the creation logic for safety.
-
-            if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
-                const transporter = nodemailer.createTransport({
-                    host: process.env.SMTP_HOST,
-                    port: Number(process.env.SMTP_PORT) || 587,
-                    secure: false,
-                    auth: {
-                        user: process.env.SMTP_USER,
-                        pass: process.env.SMTP_PASS,
-                    },
-                });
-
+            // Send Therapist Email (Reuse transporter)
+            if (data.therapistEmail) {
                 const therapistHtml = `
                     <!DOCTYPE html>
                     <html>
@@ -144,56 +129,80 @@ export async function sendBookingNotification(data: BookingNotificationData) {
                 });
                 console.log('Therapist email sent.');
             }
-        } catch (error) {
-            console.error('Error sending therapist email:', error);
         }
+    } catch (error: any) {
+        console.error('Error sending email:', error);
+        result.status = 'error';
+        result.error = error.message || error;
     }
 
-    // 2. WhatsApp Notification (Automatic via API)
+    // 2. WhatsApp Notification (Twilio)
     try {
-        const whatsappApiUrl = process.env.WHATSAPP_API_URL;
-        const whatsappToken = process.env.WHATSAPP_API_TOKEN;
+        const twilioSid = (process.env.TWILIO_ACCOUNT_SID || '').trim();
+        const twilioToken = (process.env.TWILIO_AUTH_TOKEN || '').trim();
+        const twilioFrom = (process.env.TWILIO_PHONE_NUMBER || '').trim();
 
-        if (whatsappApiUrl) {
-            console.log('Sending automatic WhatsApp message to:', data.phone);
+        if (twilioSid && twilioToken && twilioFrom) {
+            const client = twilio(twilioSid, twilioToken);
+            const { isReminder, type, therapistPhone } = data as any; // Extended properties
 
-            // Format phone number
-            let cleanPhone = data.phone.replace(/\D/g, '');
-            if (cleanPhone.length <= 11) {
-                cleanPhone = '55' + cleanPhone;
-            }
-
-            const message = `Olá ${data.name}, seu agendamento na TRG Nexus está confirmado! ✅\n\n📅 Data: ${data.date}\n⏰ Horário: ${data.time}\n👨‍⚕️ Terapeuta: ${data.therapistName || 'Especialista TRG'}\n\nRecomendamos entrar 5 minutos antes. Em caso de dúvidas, responda esta mensagem.`;
-
-            const payload = {
-                phone: cleanPhone,
-                message: message,
-                number: cleanPhone,
-                text: message
+            // Helper to format phone
+            const formatPhone = (p: string) => {
+                let cleaned = p.replace(/\D/g, '');
+                if (!cleaned.startsWith('55') && cleaned.length <= 11) cleaned = '55' + cleaned;
+                return `whatsapp:+${cleaned}`;
             };
 
-            const response = await fetch(whatsappApiUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${whatsappToken}`,
-                    'Client-Token': whatsappToken || ''
-                },
-                body: JSON.stringify(payload)
-            });
+            const messagesToSend = [];
 
-            if (response.ok) {
-                console.log('WhatsApp message sent successfully!');
-            } else {
-                const errText = await response.text();
-                // Avoid logging full tokens if possible, but status and error text are useful
-                console.error('Failed to send WhatsApp:', response.status, errText);
+            // A. Patient Message
+            if (data.phone) {
+                let body = '';
+                if (type === 'referral_offer') {
+                    // Patient doesn't get referral offer, only Target Therapist does.
+                } else if (isReminder) {
+                    body = `🔔 *Lembrete TRG Nexus*\n\nOlá ${data.name}, passando para lembrar da sua consulta amanhã!\n\n📅 ${data.date} às ${data.time}\n👨‍⚕️ ${data.therapistName || 'Especialista TRG'}`;
+                } else {
+                    body = `✅ *Agendamento Confirmado*\n\nOlá ${data.name}, seu agendamento na TRG Nexus está confirmado!\n\n📅 ${data.date} às ${data.time}\n👨‍⚕️ ${data.therapistName || 'Especialista TRG'}\n\nRecomendamos entrar 5 minutos antes.`;
+                }
+
+                if (body) {
+                    messagesToSend.push({ to: formatPhone(data.phone), body });
+                }
             }
+
+            // B. Therapist Message (New Feature)
+            // If it's a booking, notify the therapist. If it's a referral offer, satisfy that too.
+            if (therapistPhone) {
+                let tBody = '';
+                if (type === 'referral_offer') {
+                    tBody = `🚀 *Oportunidade de Transbordo*\n\nVocê tem uma nova indicação disponível!\n\nNome: ${data.name}\nValor: R$ ${data.mainComplaint || '0,00'}\n\nAcesse o painel para aceitar.`;
+                } else if (!isReminder) {
+                    // Default Booking Notification for Therapist
+                    tBody = `📅 *Novo Agendamento*\n\nPaciente: ${data.name}\nData: ${data.date} - ${data.time}\n\nVerifique sua agenda no TRG Nexus.`;
+                }
+
+                if (tBody) {
+                    messagesToSend.push({ to: formatPhone(therapistPhone), body: tBody });
+                }
+            }
+
+            // Send All Messages
+            for (const msg of messagesToSend) {
+                console.log(`Sending WhatsApp to ${msg.to}...`);
+                await client.messages.create({
+                    from: twilioFrom,
+                    to: msg.to,
+                    body: msg.body
+                });
+            }
+
+            result.status = 'sent_whatsapp_multiple';
         } else {
-            console.log('WHATSAPP_API_URL not configured. Skipping automatic sending.');
+            console.log('Twilio credentials missing. Skipping WhatsApp.');
         }
-    } catch (error) {
-        console.error('Error sending WhatsApp:', error);
+    } catch (error: any) {
+        console.error('Error sending WhatsApp (Twilio):', error);
     }
 
     return result;

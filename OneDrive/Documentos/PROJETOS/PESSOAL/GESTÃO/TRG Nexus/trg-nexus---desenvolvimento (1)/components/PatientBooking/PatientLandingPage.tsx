@@ -1,9 +1,22 @@
 import React from 'react';
-import { BrainCircuit, CheckCircle2, ArrowRight, Star, ShieldCheck, Clock, Heart, Users } from 'lucide-react';
+import { BrainCircuit, CheckCircle2, ArrowRight, Star, ShieldCheck, Clock, Heart, Users, Sun, Moon } from 'lucide-react';
 
-const PatientLandingPage: React.FC = () => {
+interface PatientLandingPageProps {
+    isDarkMode: boolean;
+    toggleTheme: () => void;
+}
+
+const PatientLandingPage: React.FC<PatientLandingPageProps> = ({ isDarkMode, toggleTheme }) => {
     const handleBooking = () => {
-        window.location.href = '/agendar';
+        // Extract therapistId from URL /paciente/:id
+        const pathParts = window.location.pathname.split('/');
+        const therapistId = pathParts[2]; // /paciente/123 -> 123
+
+        if (therapistId) {
+            window.location.href = `/agendar/${therapistId}`;
+        } else {
+            window.location.href = '/agendar';
+        }
     };
 
     return (
@@ -20,12 +33,20 @@ const PatientLandingPage: React.FC = () => {
                             TRG<span className="text-primary-500">Nexus</span>
                         </span>
                     </div>
-                    <button
-                        onClick={handleBooking}
-                        className="px-6 py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-full transition-all shadow-lg shadow-primary-500/20 active:scale-95 hidden md:block"
-                    >
-                        Agendar Consulta
-                    </button>
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={toggleTheme}
+                            className="p-2 rounded-full text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                        >
+                            {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+                        </button>
+                        <button
+                            onClick={handleBooking}
+                            className="px-6 py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-full transition-all shadow-lg shadow-primary-500/20 active:scale-95 hidden md:block"
+                        >
+                            Agendar Consulta
+                        </button>
+                    </div>
                 </div>
             </nav>
 

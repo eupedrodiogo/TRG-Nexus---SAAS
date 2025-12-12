@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrainCircuit, Check } from 'lucide-react';
 import RegisterStep from './steps/RegisterStep';
 import AnamnesisStep from './steps/AnamnesisStep';
@@ -15,10 +15,20 @@ const BookingWizard: React.FC = () => {
         history: '',
         medication: '',
         date: '',
-        time: ''
+        time: '',
+        therapistId: ''
     });
     const [isCompleted, setIsCompleted] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+
+    useEffect(() => {
+        // Extract therapistId from URL: /agendar/123
+        const pathParts = window.location.pathname.split('/');
+        // pathParts[0] = "", pathParts[1] = "agendar", pathParts[2] = "123" (optional)
+        if (pathParts.length > 2 && pathParts[2]) {
+            setFormData(prev => ({ ...prev, therapistId: pathParts[2] }));
+        }
+    }, []);
 
     const updateData = (data: any) => {
         setFormData(prev => ({ ...prev, ...data }));
@@ -26,6 +36,8 @@ const BookingWizard: React.FC = () => {
 
     const nextStep = () => setCurrentStep(prev => prev + 1);
     const prevStep = () => setCurrentStep(prev => prev - 1);
+
+    const [patientId, setPatientId] = useState<string | null>(null);
 
     const handleCompletion = async () => {
         setIsLoading(true);
@@ -36,19 +48,50 @@ const BookingWizard: React.FC = () => {
                 body: JSON.stringify(formData)
             });
 
+            let data;
+            const contentType = response.headers.get("content-type");
+            if (contentType && contentType.indexOf("application/json") !== -1) {
+                data = await response.json();
+            } else {
+                const text = await response.text();
+                throw new Error(`Server error: ${response.status} ${text.substring(0, 100)}...`);
+            }
+
             if (response.ok) {
+                setPatientId(data.patientId);
+
+                // Check email status
+                if (data.emailDebug && data.emailDebug.status !== 'sent') {
+                    console.warn('Email warning:', data.emailDebug);
+                    // Don't alarm the user too much, just let them know
+                    if (data.emailDebug.status === 'skipped_no_credentials') {
+                        console.log('Email skipped (dev mode or missing creds)');
+                    } else {
+                        alert(`Seu agendamento foi confirmado! ✅\n\nPorém, houve uma falha técnica ao enviar o e-mail de confirmação. Não se preocupe, seu horário está garantido.`);
+                    }
+                }
+
                 setIsCompleted(true);
             } else {
-                const errorData = await response.json();
-                alert(`Erro ao realizar agendamento: ${errorData.error || 'Tente novamente.'}`);
+                alert(`Erro ao realizar agendamento: ${data.error || 'Tente novamente.'}`);
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Booking error:', error);
-            alert('Erro de conexão. Verifique sua internet.');
+            alert(`Erro de conexão: ${error.message}`);
         } finally {
             setIsLoading(false);
         }
     };
+
+    // Auto-redirect effect
+    useEffect(() => {
+        if (isCompleted && patientId) {
+            const timer = setTimeout(() => {
+                window.location.href = `/portal-paciente/autenticar/${patientId}`;
+            }, 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [isCompleted, patientId]);
 
     if (isCompleted) {
         return (
@@ -57,17 +100,31 @@ const BookingWizard: React.FC = () => {
                     <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-green-600 dark:text-green-400">
                         <Check size={40} strokeWidth={3} />
                     </div>
-                    <h2 className="text-3xl font-bold text-slate-800 dark:text-white mb-4">Agendamento Confirmado!</h2>
-                    <p className="text-slate-600 dark:text-slate-300 mb-8">
-                        Obrigado, {formData.name}. Sua sessão foi agendada para o dia {new Date(formData.date).toLocaleDateString('pt-BR')} às {formData.time}.
-                        Enviamos os detalhes para seu email.
+                    <h2 className="text-3xl font-bold text-slate-800 dark:text-white mb-2">Pagamento Confirmado!</h2>
+                    <p className="text-slate-600 dark:text-slate-300 mb-6">
+                        Sua sessão foi agendada com sucesso.
                     </p>
-                    <button
-                        onClick={() => window.location.reload()}
-                        className="w-full py-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-white font-bold rounded-xl transition-all"
+
+                    <div className="mb-8 p-4 bg-primary-50 dark:bg-primary-900/20 rounded-xl border border-primary-100 dark:border-primary-900/30 flex flex-col items-center gap-2">
+                        <div className="w-6 h-6 border-2 border-primary-200 border-t-primary-600 rounded-full animate-spin"></div>
+                        <p className="text-sm font-bold text-primary-700 dark:text-primary-300">Redirecionando para seu Portal...</p>
+                    </div>
+
+                    <a
+                        href={`/portal-paciente/autenticar/${patientId}`}
+                        className="block w-full py-4 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-primary-500/30 mb-3"
                     >
-                        Voltar ao Início
-                    </button>
+                        Acessar Portal Agora
+                    </a>
+
+                    <a
+                        href={`https://wa.me/${formData.phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Olá, aqui é o seu Terapeuta TRG. Confirmando seu agendamento para dia ${new Date(formData.date).toLocaleDateString('pt-BR')} às ${formData.time}.`)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block w-full py-3 text-sm font-bold text-green-600 hover:bg-green-50 dark:hover:bg-green-900/10 rounded-xl transition-colors"
+                    >
+                        Receber confirmação no WhatsApp
+                    </a>
                 </div>
             </div>
         );
@@ -118,7 +175,7 @@ const BookingWizard: React.FC = () => {
                         <>
                             {currentStep === 1 && <RegisterStep data={formData} onUpdate={updateData} onNext={nextStep} />}
                             {currentStep === 2 && <AnamnesisStep data={formData} onUpdate={updateData} onNext={nextStep} onBack={prevStep} />}
-                            {currentStep === 3 && <ScheduleStep data={formData} onUpdate={updateData} onNext={nextStep} onBack={prevStep} />}
+                            {currentStep === 3 && <ScheduleStep data={formData} onUpdate={updateData} onNext={nextStep} onBack={prevStep} therapistId={formData.therapistId} />}
                             {currentStep === 4 && <PaymentStep data={formData} onBack={prevStep} onComplete={handleCompletion} />}
                         </>
                     )}
