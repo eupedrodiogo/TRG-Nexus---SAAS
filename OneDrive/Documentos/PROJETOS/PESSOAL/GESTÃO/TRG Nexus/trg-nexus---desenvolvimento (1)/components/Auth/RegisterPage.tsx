@@ -5,7 +5,8 @@ import { BrainCircuit, Mail, User, ArrowRight, Loader2 } from 'lucide-react';
 const RegisterPage: React.FC = () => {
     const [formData, setFormData] = useState({
         name: '',
-        email: ''
+        email: '',
+        phone: ''
     });
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
@@ -20,17 +21,21 @@ const RegisterPage: React.FC = () => {
             const plan = new URLSearchParams(window.location.search).get('plan') || 'trial';
             const redirectUrl = `${window.location.origin}/dashboard`;
 
-            console.log('Initiating Magic Link for:', formData.email);
-            console.log('Redirecting to:', redirectUrl);
+            // Basic validation
+            if (!formData.phone || formData.phone.length < 10) {
+                throw new Error('Por favor, insira um número de WhatsApp válido.');
+            }
 
-            // 1. Sign In with OTP (Magic Link)
-            // This creates the user if they don't exist (implicit signup) or just sends a link if they do.
+            console.log('Initiating Magic Link for:', formData.email);
+
+            // 1. Sign In with OTP
             const { error: authError } = await supabase.auth.signInWithOtp({
                 email: formData.email,
                 options: {
                     emailRedirectTo: redirectUrl,
                     data: {
-                        name: formData.name, // Save metadata for new users
+                        name: formData.name,
+                        phone: formData.phone, // Save phone in metadata
                         plan: plan
                     }
                 }
@@ -38,27 +43,26 @@ const RegisterPage: React.FC = () => {
 
             if (authError) throw authError;
 
-            // 2. Send Welcome Email (Backend API) - Optional info email
-            try {
-                await fetch('/api/emails/welcome', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        email: formData.email,
-                        name: formData.name,
-                        plan: plan
-                    })
-                });
-            } catch (emailError) {
-                console.error('Welcome email failed:', emailError);
-            }
+            // 2. Send Notifications (Async - don't block success state)
+            // A. Email
+            fetch('/api/emails/welcome', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: formData.email, name: formData.name, plan: plan })
+            }).catch(console.error);
 
-            // Success State
+            // B. WhatsApp
+            fetch('/api/notifications/register-welcome', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: formData.name, phone: formData.phone })
+            }).catch(console.error);
+
             setSuccess(true);
 
         } catch (err: any) {
             console.error('Registration Error:', err);
-            setError(err.message || 'Erro ao enviar email de acesso.');
+            setError(err.message || 'Erro ao realizar cadastro.');
         } finally {
             setIsLoading(false);
         }
@@ -72,16 +76,36 @@ const RegisterPage: React.FC = () => {
                         <Mail className="w-10 h-10 text-green-600 dark:text-green-400" />
                     </div>
                     <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-4">
-                        Verifique seu email!
+                        Tudo certo! Verifique seu email
                     </h2>
                     <p className="text-slate-600 dark:text-slate-400 mb-8 text-lg leading-relaxed">
-                        Enviamos um <strong>Link de Acesso Mágico</strong> para:<br />
-                        <span className="font-medium text-slate-900 dark:text-slate-200">{formData.email}</span>
+                        Enviamos um Link Mágico para <strong>{formData.email}</strong>.<br />
+                        Também enviamos uma confirmação no seu <strong>WhatsApp</strong> 📲.
                     </p>
-                    <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg mb-8 text-sm text-blue-800 dark:text-blue-200">
-                        <p>Clique no botão do email para acessar o sistema automaticamente. Não precisa de senha!</p>
+
+                    <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-xl mb-8 border border-blue-100 dark:border-blue-800">
+                        <p className="text-blue-900 dark:text-blue-100 font-medium mb-4">
+                            Abra seu email e clique no botão:
+                        </p>
+                        <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-dashed border-blue-200 dark:border-blue-700 font-bold text-primary-600 dark:text-primary-400 mb-4">
+                            "Acessar Painel VIP"
+                        </div>
+                        <p className="text-xs text-blue-700 dark:text-blue-300">
+                            Isso validará sua conta automaticamente, sem senhas!
+                        </p>
                     </div>
-                    <a href="/login" className="text-primary-600 hover:text-primary-500 font-medium">
+
+                    <a
+                        href={`mailto:${formData.email}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center justify-center gap-2 w-full py-3.5 px-6 border border-transparent shadow-lg text-sm font-bold rounded-xl text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-all active:scale-95 mb-4"
+                    >
+                        <Mail size={18} />
+                        Abrir meu Email agora
+                    </a>
+
+                    <a href="/login" className="text-sm text-slate-500 hover:text-primary-600 transition-colors">
                         Voltar para Login
                     </a>
                 </div>
@@ -126,6 +150,24 @@ const RegisterPage: React.FC = () => {
                                     placeholder="Seu nome"
                                 />
                             </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">WhatsApp</label>
+                            <div className="mt-1 relative">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <span className="text-slate-400 text-xs font-bold">BR</span>
+                                </div>
+                                <input
+                                    type="tel"
+                                    required
+                                    value={formData.phone}
+                                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                    className="appearance-none block w-full pl-10 px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg placeholder-slate-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 dark:bg-slate-800 dark:text-white transition-colors"
+                                    placeholder="(11) 99999-9999"
+                                />
+                            </div>
+                            <p className="mt-1 text-xs text-slate-500">Para receber confirmação e notificações.</p>
                         </div>
 
                         <div>

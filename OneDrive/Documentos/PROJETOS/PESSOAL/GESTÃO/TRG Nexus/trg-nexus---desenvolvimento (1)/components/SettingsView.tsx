@@ -232,15 +232,15 @@ const SettingsView: React.FC = () => {
   const [supportForm, setSupportForm] = useState({ category: 'duvida', priority: 'normal', subject: '', message: '' });
 
   const HELP_ARTICLES = [
-    { id: 1, title: 'Como configurar minha agenda?', category: 'Agenda', content: 'Para configurar sua agenda...' },
-    { id: 2, title: 'Integração com Google Agenda', category: 'Integrações', content: 'Vá em configurações > integrações...' },
-    { id: 3, title: 'Como emitir notas fiscais?', category: 'Financeiro', content: 'O sistema gera recibos simples...' },
+    { id: 1, title: 'Como configurar minha agenda?', category: 'Agenda', content: 'Para configurar sua agenda...', icon: CalendarIcon, description: 'Aprenda a definir seus seus horários de atendimento e bloqueios.' },
+    { id: 2, title: 'Integração com Google Agenda', category: 'Integrações', content: 'Vá em configurações > integrações...', icon: CalendarIcon, description: 'Sincronize seus eventos automaticamente.' },
+    { id: 3, title: 'Como emitir notas fiscais?', category: 'Financeiro', content: 'O sistema gera recibos simples...', icon: FileText, description: 'Guia sobre recibos e documentos fiscais.' },
   ];
 
   const SYSTEM_GUIDE = {
-    intro: { title: 'Bem-vindo ao TRG Nexus', content: 'Visão geral do sistema.' },
-    profile: { title: 'Configurando seu Perfil', content: 'Como deixar seu perfil atrativo.' },
-    financial: { title: 'Gestão Financeira', content: 'Controle de pagamentos e recebimentos.' }
+    intro: { id: 'intro', title: 'Bem-vindo ao TRG Nexus', content: 'Visão geral do sistema.', icon: BookOpen },
+    profile: { id: 'profile', title: 'Configurando seu Perfil', content: 'Como deixar seu perfil atrativo.', icon: User },
+    financial: { id: 'financial', title: 'Gestão Financeira', content: 'Controle de pagamentos e recebimentos.', icon: Wallet }
   };
 
   const handleExportData = () => {
