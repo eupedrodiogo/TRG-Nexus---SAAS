@@ -20,6 +20,7 @@ const LoginPage: React.FC = () => {
         email: '',
         password: ''
     });
+    const [loginMode, setLoginMode] = useState<'password' | 'magic_link'>('password');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
@@ -39,23 +40,38 @@ const LoginPage: React.FC = () => {
         setIsLoading(true);
 
         try {
-            const { error: authError, data } = await supabase.auth.signInWithPassword({
-                email: formData.email,
-                password: formData.password
-            });
+            if (loginMode === 'password') {
+                const { error: authError, data } = await supabase.auth.signInWithPassword({
+                    email: formData.email,
+                    password: formData.password
+                });
 
-            if (authError) throw authError;
+                if (authError) throw authError;
+                console.log('Login successful:', data);
 
-            console.log('Login successful:', data);
+                // Force session refresh assurance
+                await supabase.auth.getSession();
 
-            // Force session refresh assurance
-            const { data: sessionData } = await supabase.auth.getSession();
-            console.log('Session after login:', sessionData);
+                // Wait a brief moment for AuthContext to update logic
+                setTimeout(() => {
+                    navigate('/dashboard');
+                }, 500);
 
-            // Wait a brief moment for AuthContext to update logic
-            setTimeout(() => {
-                navigate('/dashboard');
-            }, 500);
+            } else {
+                // Magic Link Login
+                const { error: otpError } = await supabase.auth.signInWithOtp({
+                    email: formData.email,
+                    options: {
+                        emailRedirectTo: `${window.location.origin}/dashboard`
+                    }
+                });
+
+                if (otpError) throw otpError;
+
+                setSuccessMessage('Link de acesso enviado! Verifique seu email.');
+                setIsLoading(false);
+                return; // Stop execution, don't navigate yet
+            }
 
         } catch (err: any) {
             setError(err.message === 'Invalid login credentials' ? 'Credenciais inválidas.' : err.message);
@@ -85,76 +101,156 @@ const LoginPage: React.FC = () => {
 
             <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
                 <div className="bg-white dark:bg-slate-900 py-8 px-4 shadow-xl shadow-slate-200/50 dark:shadow-none sm:rounded-2xl sm:px-10 border border-slate-100 dark:border-slate-800">
-                    <form className="space-y-6" onSubmit={handleSubmit}>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Email</label>
-                            <div className="mt-1 relative">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <Mail className="h-5 w-5 text-slate-400" />
-                                </div>
-                                <input
-                                    type="email"
-                                    required
-                                    value={formData.email}
-                                    onChange={e => setFormData({ ...formData, email: e.target.value })}
-                                    className="block w-full pl-10 appearance-none rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 placeholder-slate-400 focus:border-primary-500 focus:outline-none focus:ring-primary-500 sm:text-sm dark:bg-slate-800 dark:text-white transition-colors"
-                                    placeholder="seu@email.com"
-                                />
-                            </div>
-                        </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Senha</label>
-                            <div className="mt-1 relative">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <Lock className="h-5 w-5 text-slate-400" />
-                                </div>
-                                <input
-                                    type="password"
-                                    required
-                                    value={formData.password}
-                                    onChange={e => setFormData({ ...formData, password: e.target.value })}
-                                    className="block w-full pl-10 appearance-none rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 placeholder-slate-400 focus:border-primary-500 focus:outline-none focus:ring-primary-500 sm:text-sm dark:bg-slate-800 dark:text-white transition-colors"
-                                    placeholder="••••••••"
-                                />
-                            </div>
-                            <div className="flex items-center justify-end mt-2">
-                                <a href="/forgot-password" className="text-sm font-medium text-primary-600 hover:text-primary-500">
-                                    Esqueceu a senha?
-                                </a>
-                            </div>
-                        </div>
-
-                        {error && (
-                            <div className="rounded-md bg-red-50 dark:bg-red-900/30 p-4">
-                                <div className="flex">
-                                    <div className="ml-3">
-                                        <h3 className="text-sm font-medium text-red-800 dark:text-red-200">{error}</h3>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {successMessage && (
-                            <div className="rounded-md bg-green-50 dark:bg-green-900/30 p-4">
-                                <div className="flex">
-                                    <div className="ml-3">
-                                        <h3 className="text-sm font-medium text-green-800 dark:text-green-200">{successMessage}</h3>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        <div>
+                    <div className="flex justify-center mb-6">
+                        <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-lg flex space-x-1">
                             <button
-                                type="submit"
-                                disabled={isLoading}
-                                className="flex w-full justify-center items-center gap-2 rounded-xl border border-transparent bg-primary-600 py-3 px-4 text-sm font-bold text-white shadow-lg shadow-primary-500/20 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
+                                type="button"
+                                onClick={() => setLoginMode('password')}
+                                className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${loginMode === 'password'
+                                        ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                                    }`}
                             >
-                                {isLoading ? <Loader2 className="animate-spin" size={20} /> : <>Entrar <ArrowRight size={20} /></>}
+                                Senha
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setLoginMode('magic_link')}
+                                className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${loginMode === 'magic_link'
+                                        ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                                    }`}
+                            >
+                                Link Mágico
                             </button>
                         </div>
-                    </form>
+                    </div>
+
+                    {loginMode === 'password' ? (
+                        <form className="space-y-6" onSubmit={handleSubmit}>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Email</label>
+                                <div className="mt-1 relative">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <Mail className="h-5 w-5 text-slate-400" />
+                                    </div>
+                                    <input
+                                        type="email"
+                                        required
+                                        value={formData.email}
+                                        onChange={e => setFormData({ ...formData, email: e.target.value })}
+                                        className="block w-full pl-10 appearance-none rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 placeholder-slate-400 focus:border-primary-500 focus:outline-none focus:ring-primary-500 sm:text-sm dark:bg-slate-800 dark:text-white transition-colors"
+                                        placeholder="seu@email.com"
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Senha</label>
+                                <div className="mt-1 relative">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <Lock className="h-5 w-5 text-slate-400" />
+                                    </div>
+                                    <input
+                                        type="password"
+                                        required
+                                        value={formData.password}
+                                        onChange={e => setFormData({ ...formData, password: e.target.value })}
+                                        className="block w-full pl-10 appearance-none rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 placeholder-slate-400 focus:border-primary-500 focus:outline-none focus:ring-primary-500 sm:text-sm dark:bg-slate-800 dark:text-white transition-colors"
+                                        placeholder="••••••••"
+                                    />
+                                </div>
+                                <div className="flex items-center justify-end mt-2">
+                                    <a href="/forgot-password" className="text-sm font-medium text-primary-600 hover:text-primary-500">
+                                        Esqueceu a senha?
+                                    </a>
+                                </div>
+                            </div>
+
+                            {error && (
+                                <div className="rounded-md bg-red-50 dark:bg-red-900/30 p-4">
+                                    <div className="flex">
+                                        <div className="ml-3">
+                                            <h3 className="text-sm font-medium text-red-800 dark:text-red-200">{error}</h3>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {successMessage && (
+                                <div className="rounded-md bg-green-50 dark:bg-green-900/30 p-4">
+                                    <div className="flex">
+                                        <div className="ml-3">
+                                            <h3 className="text-sm font-medium text-green-800 dark:text-green-200">{successMessage}</h3>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div>
+                                <button
+                                    type="submit"
+                                    disabled={isLoading}
+                                    className="flex w-full justify-center items-center gap-2 rounded-xl border border-transparent bg-primary-600 py-3 px-4 text-sm font-bold text-white shadow-lg shadow-primary-500/20 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
+                                >
+                                    {isLoading ? <Loader2 className="animate-spin" size={20} /> : <>Entrar <ArrowRight size={20} /></>}
+                                </button>
+                            </div>
+                        </form>
+                    ) : (
+                        <form className="space-y-6" onSubmit={handleSubmit}>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Email para Login</label>
+                                <div className="mt-1 relative">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <Mail className="h-5 w-5 text-slate-400" />
+                                    </div>
+                                    <input
+                                        type="email"
+                                        required
+                                        value={formData.email}
+                                        onChange={e => setFormData({ ...formData, email: e.target.value })}
+                                        className="block w-full pl-10 appearance-none rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 placeholder-slate-400 focus:border-primary-500 focus:outline-none focus:ring-primary-500 sm:text-sm dark:bg-slate-800 dark:text-white transition-colors"
+                                        placeholder="seu@email.com"
+                                    />
+                                </div>
+                                <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                                    Enviaremos um link mágico para você entrar sem senha.
+                                </p>
+                            </div>
+
+                            {error && (
+                                <div className="rounded-md bg-red-50 dark:bg-red-900/30 p-4">
+                                    <div className="flex">
+                                        <div className="ml-3">
+                                            <h3 className="text-sm font-medium text-red-800 dark:text-red-200">{error}</h3>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {successMessage && (
+                                <div className="rounded-md bg-green-50 dark:bg-green-900/30 p-4">
+                                    <div className="flex">
+                                        <div className="ml-3">
+                                            <h3 className="text-sm font-medium text-green-800 dark:text-green-200">{successMessage}</h3>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div>
+                                <button
+                                    type="submit"
+                                    disabled={isLoading}
+                                    className="flex w-full justify-center items-center gap-2 rounded-xl border border-transparent bg-primary-600 py-3 px-4 text-sm font-bold text-white shadow-lg shadow-primary-500/20 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
+                                >
+                                    {isLoading ? <Loader2 className="animate-spin" size={20} /> : <>Receber Link de Acesso <Mail size={20} /></>}
+                                </button>
+                            </div>
+                        </form>
+                    )}
 
                     <div className="mt-6">
                         <div className="relative">

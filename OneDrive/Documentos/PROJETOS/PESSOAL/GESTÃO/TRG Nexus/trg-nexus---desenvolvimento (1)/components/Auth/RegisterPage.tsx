@@ -1,38 +1,36 @@
 import React, { useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { BrainCircuit, Mail, Lock, User, ArrowRight, Loader2 } from 'lucide-react';
+import { BrainCircuit, Mail, User, ArrowRight, Loader2 } from 'lucide-react';
 
 const RegisterPage: React.FC = () => {
     const [formData, setFormData] = useState({
         name: '',
-        email: '',
-        password: '',
-        confirmPassword: ''
+        email: ''
     });
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
+    const [success, setSuccess] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
-
-        if (formData.password !== formData.confirmPassword) {
-            setError('As senhas não coincidem.');
-            return;
-        }
-
         setIsLoading(true);
 
         try {
             const plan = new URLSearchParams(window.location.search).get('plan') || 'trial';
+            const redirectUrl = `${window.location.origin}/dashboard`;
 
-            // 1. Sign Up with Supabase
-            const { data: authData, error: authError } = await supabase.auth.signUp({
+            console.log('Initiating Magic Link for:', formData.email);
+            console.log('Redirecting to:', redirectUrl);
+
+            // 1. Sign In with OTP (Magic Link)
+            // This creates the user if they don't exist (implicit signup) or just sends a link if they do.
+            const { error: authError } = await supabase.auth.signInWithOtp({
                 email: formData.email,
-                password: formData.password,
                 options: {
+                    emailRedirectTo: redirectUrl,
                     data: {
-                        name: formData.name,
+                        name: formData.name, // Save metadata for new users
                         plan: plan
                     }
                 }
@@ -40,7 +38,7 @@ const RegisterPage: React.FC = () => {
 
             if (authError) throw authError;
 
-            // 2. Send Welcome Email (Backend API)
+            // 2. Send Welcome Email (Backend API) - Optional info email
             try {
                 await fetch('/api/emails/welcome', {
                     method: 'POST',
@@ -53,18 +51,43 @@ const RegisterPage: React.FC = () => {
                 });
             } catch (emailError) {
                 console.error('Welcome email failed:', emailError);
-                // Don't block registration success
             }
 
-            // Success
-            window.location.href = '/login?registered=true';
+            // Success State
+            setSuccess(true);
 
         } catch (err: any) {
-            setError(err.message);
+            console.error('Registration Error:', err);
+            setError(err.message || 'Erro ao enviar email de acesso.');
         } finally {
             setIsLoading(false);
         }
     };
+
+    if (success) {
+        return (
+            <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans">
+                <div className="sm:mx-auto sm:w-full sm:max-w-md text-center px-4">
+                    <div className="w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto mb-6 shadow-sm">
+                        <Mail className="w-10 h-10 text-green-600 dark:text-green-400" />
+                    </div>
+                    <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-4">
+                        Verifique seu email!
+                    </h2>
+                    <p className="text-slate-600 dark:text-slate-400 mb-8 text-lg leading-relaxed">
+                        Enviamos um <strong>Link de Acesso Mágico</strong> para:<br />
+                        <span className="font-medium text-slate-900 dark:text-slate-200">{formData.email}</span>
+                    </p>
+                    <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg mb-8 text-sm text-blue-800 dark:text-blue-200">
+                        <p>Clique no botão do email para acessar o sistema automaticamente. Não precisa de senha!</p>
+                    </div>
+                    <a href="/login" className="text-primary-600 hover:text-primary-500 font-medium">
+                        Voltar para Login
+                    </a>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans">
@@ -81,7 +104,7 @@ const RegisterPage: React.FC = () => {
                     Crie sua conta de Terapeuta
                 </h2>
                 <p className="mt-2 text-center text-sm text-slate-600 dark:text-slate-400">
-                    Gerencie seus pacientes e agendamentos de forma simples.
+                    Acesso seguro e simplificado via email.
                 </p>
             </div>
 
@@ -98,15 +121,15 @@ const RegisterPage: React.FC = () => {
                                     type="text"
                                     required
                                     value={formData.name}
-                                    onChange={e => setFormData({ ...formData, name: e.target.value })}
-                                    className="block w-full pl-10 appearance-none rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 placeholder-slate-400 focus:border-primary-500 focus:outline-none focus:ring-primary-500 sm:text-sm dark:bg-slate-800 dark:text-white transition-colors"
+                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                    className="appearance-none block w-full pl-10 px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg placeholder-slate-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 dark:bg-slate-800 dark:text-white transition-colors"
                                     placeholder="Seu nome"
                                 />
                             </div>
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Email</label>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Email Profissional</label>
                             <div className="mt-1 relative">
                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                     <Mail className="h-5 w-5 text-slate-400" />
@@ -115,43 +138,9 @@ const RegisterPage: React.FC = () => {
                                     type="email"
                                     required
                                     value={formData.email}
-                                    onChange={e => setFormData({ ...formData, email: e.target.value })}
-                                    className="block w-full pl-10 appearance-none rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 placeholder-slate-400 focus:border-primary-500 focus:outline-none focus:ring-primary-500 sm:text-sm dark:bg-slate-800 dark:text-white transition-colors"
-                                    placeholder="seu@email.com"
-                                />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Senha</label>
-                            <div className="mt-1 relative">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <Lock className="h-5 w-5 text-slate-400" />
-                                </div>
-                                <input
-                                    type="password"
-                                    required
-                                    value={formData.password}
-                                    onChange={e => setFormData({ ...formData, password: e.target.value })}
-                                    className="block w-full pl-10 appearance-none rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 placeholder-slate-400 focus:border-primary-500 focus:outline-none focus:ring-primary-500 sm:text-sm dark:bg-slate-800 dark:text-white transition-colors"
-                                    placeholder="••••••••"
-                                />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Confirmar Senha</label>
-                            <div className="mt-1 relative">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <Lock className="h-5 w-5 text-slate-400" />
-                                </div>
-                                <input
-                                    type="password"
-                                    required
-                                    value={formData.confirmPassword}
-                                    onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })}
-                                    className="block w-full pl-10 appearance-none rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 placeholder-slate-400 focus:border-primary-500 focus:outline-none focus:ring-primary-500 sm:text-sm dark:bg-slate-800 dark:text-white transition-colors"
-                                    placeholder="••••••••"
+                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                    className="appearance-none block w-full pl-10 px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg placeholder-slate-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 dark:bg-slate-800 dark:text-white transition-colors"
+                                    placeholder="voce@exemplo.com"
                                 />
                             </div>
                         </div>
@@ -160,7 +149,12 @@ const RegisterPage: React.FC = () => {
                             <div className="rounded-md bg-red-50 dark:bg-red-900/30 p-4">
                                 <div className="flex">
                                     <div className="ml-3">
-                                        <h3 className="text-sm font-medium text-red-800 dark:text-red-200">{error}</h3>
+                                        <h3 className="text-sm font-medium text-red-800 dark:text-red-200">
+                                            Erro
+                                        </h3>
+                                        <div className="mt-2 text-sm text-red-700 dark:text-red-300">
+                                            {error}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -170,29 +164,19 @@ const RegisterPage: React.FC = () => {
                             <button
                                 type="submit"
                                 disabled={isLoading}
-                                className="flex w-full justify-center items-center gap-2 rounded-xl border border-transparent bg-primary-600 py-3 px-4 text-sm font-bold text-white shadow-lg shadow-primary-500/20 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
+                                className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-all disabled:opacity-70 disabled:cursor-not-allowed shadow-lg shadow-primary-500/30"
                             >
-                                {isLoading ? <Loader2 className="animate-spin" size={20} /> : <>Criar Conta <ArrowRight size={20} /></>}
+                                {isLoading ? (
+                                    <Loader2 className="animate-spin h-5 w-5 text-white" />
+                                ) : (
+                                    <span className="flex items-center gap-2">
+                                        Receber Link de Acesso
+                                        <ArrowRight size={18} className="text-primary-100 group-hover:translate-x-1 transition-transform" />
+                                    </span>
+                                )}
                             </button>
                         </div>
                     </form>
-
-                    <div className="mt-6">
-                        <div className="relative">
-                            <div className="absolute inset-0 flex items-center">
-                                <div className="w-full border-t border-slate-300 dark:border-slate-700" />
-                            </div>
-                            <div className="relative flex justify-center text-sm">
-                                <span className="bg-white dark:bg-slate-900 px-2 text-slate-500">Já tem uma conta?</span>
-                            </div>
-                        </div>
-
-                        <div className="mt-6 text-center">
-                            <a href="/login" className="font-medium text-primary-600 hover:text-primary-500">
-                                Entrar no sistema
-                            </a>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>

@@ -13,6 +13,7 @@ import MarketingView from '../MarketingView';
 import ReportsView from '../ReportsView';
 import SettingsView from '../SettingsView';
 import { Loader2 } from 'lucide-react';
+import PasswordSetupModal from '../Auth/PasswordSetupModal';
 
 
 const TherapistDashboard: React.FC = () => {
@@ -23,6 +24,7 @@ const TherapistDashboard: React.FC = () => {
     const [isDarkMode, setIsDarkMode] = useState(false);
     const [therapist, setTherapist] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [showPasswordSetup, setShowPasswordSetup] = useState(false);
 
     // Load therapist data and theme
     const { user } = useAuth();
@@ -68,6 +70,12 @@ const TherapistDashboard: React.FC = () => {
         } else {
             // If accessed directly without auth (should be caught by ProtectedRoute, but safe fallback)
             setIsLoading(true);
+        }
+
+        // Check if user needs to set a password (for Magic Link users)
+        if (user && user.user_metadata && !user.user_metadata.has_set_password) {
+             // Delay slightly to ensure load
+            setTimeout(() => setShowPasswordSetup(true), 1000);
         }
 
         // Theme check
@@ -170,6 +178,11 @@ const TherapistDashboard: React.FC = () => {
                     onClick={() => setIsMobileOpen(false)}
                 />
             )}
+
+            <PasswordSetupModal
+                isOpen={showPasswordSetup}
+                onSuccess={() => setShowPasswordSetup(false)}
+            />
         </div>
     );
 };
