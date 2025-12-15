@@ -5,7 +5,7 @@ import { useClientData } from './ClientContext';
 import NotificationBell from '../NotificationBell';
 
 const ClientDashboard: React.FC = () => {
-    const { patient, appointments, error, debugData } = useClientData();
+    const { patient, appointments, error } = useClientData();
 
     // Get next upcoming appointment
     const nextAppointment = appointments.find(appt => appt.status === 'Agendado');

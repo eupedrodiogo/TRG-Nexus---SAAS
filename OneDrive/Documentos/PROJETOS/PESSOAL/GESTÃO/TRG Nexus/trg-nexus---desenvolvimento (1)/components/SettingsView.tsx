@@ -939,7 +939,7 @@ const SettingsView: React.FC = () => {
                     <div className="flex flex-1 overflow-hidden">
                       {/* Guide Sidebar */}
                       <div className="w-64 border-r border-slate-100 dark:border-slate-800 overflow-y-auto p-4 space-y-1 bg-slate-50/30 dark:bg-slate-900">
-                        {SYSTEM_GUIDE.map(section => (
+                        {Object.values(SYSTEM_GUIDE).map(section => (
                           <button
                             key={section.id}
                             onClick={() => setGuideSection(section.id)}
@@ -956,7 +956,7 @@ const SettingsView: React.FC = () => {
 
                       {/* Guide Content */}
                       <div className="flex-1 overflow-y-auto p-8">
-                        {SYSTEM_GUIDE.map(section => (
+                        {Object.values(SYSTEM_GUIDE).map(section => (
                           guideSection === section.id && (
                             <div key={section.id} className="animate-fade-in max-w-2xl">
                               <div className="flex items-center gap-4 mb-6 pb-4 border-b border-slate-100 dark:border-slate-800">

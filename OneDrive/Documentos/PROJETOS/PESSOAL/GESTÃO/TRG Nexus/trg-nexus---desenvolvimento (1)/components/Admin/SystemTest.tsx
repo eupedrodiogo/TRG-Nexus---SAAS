@@ -214,7 +214,7 @@ const SystemTest: React.FC = () => {
                             </p>
                         </div>
                     )}
-                    )}
+
                 </div>
             </div>
 

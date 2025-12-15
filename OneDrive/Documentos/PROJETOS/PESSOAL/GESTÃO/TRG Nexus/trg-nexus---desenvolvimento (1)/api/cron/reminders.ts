@@ -73,8 +73,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         phone: pPhone,
                         date: appt.date,
                         time: appt.time,
-                        therapistName: tName,
-                        isReminder: true // Optional flag if we want slightly different text in notification
+                        therapistName: tName
                     });
 
                     updates.push(appt.id);

@@ -175,7 +175,7 @@ const BookingWizard: React.FC = () => {
                         <>
                             {currentStep === 1 && <RegisterStep data={formData} onUpdate={updateData} onNext={nextStep} />}
                             {currentStep === 2 && <AnamnesisStep data={formData} onUpdate={updateData} onNext={nextStep} onBack={prevStep} />}
-                            {currentStep === 3 && <ScheduleStep data={formData} onUpdate={updateData} onNext={nextStep} onBack={prevStep} therapistId={formData.therapistId} />}
+                            {currentStep === 3 && <ScheduleStep data={formData} onUpdate={updateData} onNext={nextStep} onBack={prevStep} />}
                             {currentStep === 4 && <PaymentStep data={formData} onBack={prevStep} onComplete={handleCompletion} />}
                         </>
                     )}
