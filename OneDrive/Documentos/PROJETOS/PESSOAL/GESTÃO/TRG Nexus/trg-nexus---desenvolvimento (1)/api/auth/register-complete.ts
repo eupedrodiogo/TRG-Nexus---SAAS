@@ -108,7 +108,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             console.log(`[Force Reset] Checking existence for test user: ${email}`);
             const { data: users, error: listError } = await supabaseAdmin.auth.admin.listUsers();
             if (!listError && users.users) {
-                const target = users.users.find(u => u.email === email);
+                const target = users.users.find((u: any) => u.email === email);
                 if (target) {
                     console.log(`[Force Reset] Deleting test user ${target.id}`);
                     await supabaseAdmin.auth.admin.deleteUser(target.id);
