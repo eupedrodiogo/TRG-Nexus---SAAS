@@ -174,8 +174,8 @@ const SudScale = ({ value, onChange, label }: { value: number, onChange: (v: num
                     key={num}
                     onClick={() => onChange(num)}
                     className={`text-xs font-bold transition-all ${value === num
-                        ? `${colors.text} scale-125`
-                        : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+                      ? `${colors.text} scale-125`
+                      : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
                       }`}
                   >
                     {num}
@@ -199,8 +199,8 @@ const SudScale = ({ value, onChange, label }: { value: number, onChange: (v: num
                   key={num}
                   onClick={() => onChange(num)}
                   className={`h-9 rounded-lg text-xs font-bold transition-all ${value === num
-                      ? `${btnColors.bg} text-white shadow-md scale-110`
-                      : 'bg-slate-50 dark:bg-slate-700/50 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-100 dark:border-slate-700'
+                    ? `${btnColors.bg} text-white shadow-md scale-110`
+                    : 'bg-slate-50 dark:bg-slate-700/50 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-100 dark:border-slate-700'
                     }`}
                 >
                   {num}
@@ -688,6 +688,7 @@ const SessionView: React.FC = () => {
   };
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [chronologicalScores, setChronologicalScores] = useState<Record<string, number[]>>({});
   const audioContextRef = useRef<AudioContext | null>(null);
   const animationFrameRef = useRef<number | null>(null);
 
@@ -897,7 +898,47 @@ const SessionView: React.FC = () => {
   const handleStartEditAge = (index: number) => { setEditingAgeIndex(index); setEditAgeValue(ageRanges[index]); };
   const handleSaveEditAge = (index: number) => { if (editAgeValue.trim()) { const n = [...ageRanges]; n[index] = editAgeValue.trim(); setAgeRanges(n); setEditingAgeIndex(null); } };
   const handleDeleteAge = (index: number) => { if (window.confirm('Remover faixa?')) setAgeRanges(ageRanges.filter((_, i) => i !== index)); };
-  const handleSelectAgeRange = (range: string) => setSelectedAgeRange(range === selectedAgeRange ? null : range);
+
+  const handleSelectAgeRange = (newRange: string) => {
+    // If clicking the already selected range, do nothing
+    if (newRange === selectedAgeRange) return;
+
+    setCycleScores(prevScores => {
+      const currentScores = prevScores.cronologico || [10];
+
+      // 1. Save current range data to chronologicalScores history
+      // We use a functional update for setChronologicalScores inside here to be safe, 
+      // but since we need the result immediately, we can just update the history state separately.
+
+      // However, to ensure synchronization, we will update chronologicalScores first.
+      return prevScores;
+    });
+
+    // Update History State
+    setChronologicalScores(prevHistory => {
+      const history = { ...prevHistory };
+      // Save old range if it existed
+      if (selectedAgeRange) {
+        history[selectedAgeRange] = cycleScores.cronologico || [10];
+      }
+      return history;
+    });
+
+    // Update Active Graph State
+    // We need to read from the *latest* history or default to [10]
+    // Since state updates are async, we might not have the *just saved* history in `chronologicalScores` variable yet.
+    // But we are switching TO `newRange`, so we only care if `newRange` exists in the *current* chronologicalScores or if it's new.
+
+    const nextData = chronologicalScores[newRange] || [10];
+
+    setCycleScores(prev => ({
+      ...prev,
+      cronologico: nextData
+    }));
+
+    // Finally, switch the range selection
+    setSelectedAgeRange(newRange);
+  };
   const hasPhaseData = (phaseKey: string) => { const r = phaseRecords[phaseKey]; return r && (r.duration || r.response || r.observation); };
 
   const movePhase = (index: number, dir: 'up' | 'down') => {
