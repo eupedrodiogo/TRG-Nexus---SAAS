@@ -83,6 +83,22 @@ declare global {
 }
 
 const SudScale = ({ value, onChange, label }: { value: number, onChange: (v: number) => void, label?: string }) => {
+  const [isMobile, setIsMobile] = useState(true); // Default to mobile for safety
+
+  useEffect(() => {
+    const checkMobile = () => {
+      // Force mobile for anything smaller than 1024px (Large Tablets/Laptops)
+      // This covers all phones including landscape and most tablets
+      setIsMobile(window.innerWidth < 1024);
+    };
+
+    // Check immediately
+    checkMobile();
+
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   const getLabel = (v: number) => {
     if (v === 0) return "Neutro / Paz";
     if (v <= 2) return "Desconforto Mínimo";
@@ -112,123 +128,122 @@ const SudScale = ({ value, onChange, label }: { value: number, onChange: (v: num
             {value} - {getLabel(value)}
           </p>
         </div>
-        <div className="text-right hidden lg:block">
-          <span className="text-[10px] text-slate-400 font-medium bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-full border border-slate-200 dark:border-slate-600">
-            0 = Sem Queixa | 10 = O Pior Possível
-          </span>
-        </div>
+        {!isMobile && (
+          <div className="text-right">
+            <span className="text-[10px] text-slate-400 font-medium bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-full border border-slate-200 dark:border-slate-600">
+              0 = Sem Queixa | 10 = O Pior Possível
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* MOBILE: Vertical Slider Design */}
-      <div className="lg:hidden">
-        <div className="flex gap-4 items-center">
-          {/* Slider Track */}
-          <div className="relative flex-1">
-            <input
-              type="range"
-              min="0"
-              max="10"
-              value={value}
-              onChange={(e) => onChange(Number(e.target.value))}
-              className={`w-full h-3 rounded-lg appearance-none cursor-pointer transition-all
-                bg-gradient-to-r from-emerald-200 via-amber-200 to-rose-200
-                dark:from-emerald-900/30 dark:via-amber-900/30 dark:to-rose-900/30
-                [&::-webkit-slider-thumb]:appearance-none
-                [&::-webkit-slider-thumb]:w-8
-                [&::-webkit-slider-thumb]:h-8
-                [&::-webkit-slider-thumb]:rounded-full
-                [&::-webkit-slider-thumb]:${colors.bg}
-                [&::-webkit-slider-thumb]:shadow-lg
-                [&::-webkit-slider-thumb]:ring-4
-                [&::-webkit-slider-thumb]:${colors.ring}
-                [&::-webkit-slider-thumb]:cursor-pointer
-                [&::-webkit-slider-thumb]:transition-all
-                [&::-webkit-slider-thumb]:hover:scale-110
-                [&::-moz-range-thumb]:w-8
-                [&::-moz-range-thumb]:h-8
-                [&::-moz-range-thumb]:rounded-full
-                [&::-moz-range-thumb]:${colors.bg}
-                [&::-moz-range-thumb]:border-0
-                [&::-moz-range-thumb]:shadow-lg
-                [&::-moz-range-thumb]:cursor-pointer
-              `}
-            />
-            {/* Value Markers */}
-            <div className="flex justify-between mt-2 px-1">
-              {[0, 2, 4, 6, 8, 10].map((num) => (
+      {isMobile ? (
+        /* MOBILE DESIGN (Javascript Controlled) */
+        <div>
+          <div className="flex gap-4 items-center">
+            {/* Slider Track */}
+            <div className="relative flex-1">
+              <input
+                type="range"
+                min="0"
+                max="10"
+                value={value}
+                onChange={(e) => onChange(Number(e.target.value))}
+                className={`w-full h-3 rounded-lg appearance-none cursor-pointer transition-all
+                  bg-gradient-to-r from-emerald-200 via-amber-200 to-rose-200
+                  dark:from-emerald-900/30 dark:via-amber-900/30 dark:to-rose-900/30
+                  [&::-webkit-slider-thumb]:appearance-none
+                  [&::-webkit-slider-thumb]:w-8
+                  [&::-webkit-slider-thumb]:h-8
+                  [&::-webkit-slider-thumb]:rounded-full
+                  [&::-webkit-slider-thumb]:bg-white
+                  [&::-webkit-slider-thumb]:shadow-lg
+                  [&::-webkit-slider-thumb]:ring-4
+                  [&::-webkit-slider-thumb]:${colors.ring}
+                  [&::-webkit-slider-thumb]:border-4
+                  [&::-webkit-slider-thumb]:${colors.border}
+                  [&::-webkit-slider-thumb]:cursor-pointer
+                  [&::-webkit-slider-thumb]:transition-all
+                  [&::-webkit-slider-thumb]:hover:scale-110
+                `}
+              />
+              {/* Value Markers */}
+              <div className="flex justify-between mt-2 px-1">
+                {[0, 2, 4, 6, 8, 10].map((num) => (
+                  <button
+                    key={num}
+                    onClick={() => onChange(num)}
+                    className={`text-xs font-bold transition-all ${value === num
+                        ? `${colors.text} scale-125`
+                        : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+                      }`}
+                  >
+                    {num}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Large Value Display */}
+            <div className={`flex-shrink-0 w-20 h-20 rounded-2xl ${colors.bg} text-white flex items-center justify-center shadow-lg ring-4 ${colors.ring}`}>
+              <span className="text-3xl font-bold">{value}</span>
+            </div>
+          </div>
+
+          {/* Quick Select Buttons */}
+          <div className="grid grid-cols-6 sm:grid-cols-11 gap-1 mt-5">
+            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => {
+              const btnColors = getColorClasses(num);
+              return (
                 <button
                   key={num}
                   onClick={() => onChange(num)}
-                  className={`text-xs font-bold transition-all ${value === num
-                      ? `${colors.text} scale-125`
-                      : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+                  className={`h-9 rounded-lg text-xs font-bold transition-all ${value === num
+                      ? `${btnColors.bg} text-white shadow-md scale-110`
+                      : 'bg-slate-50 dark:bg-slate-700/50 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-100 dark:border-slate-700'
                     }`}
                 >
                   {num}
                 </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Large Value Display */}
-          <div className={`flex-shrink-0 w-20 h-20 rounded-2xl ${colors.bg} text-white flex items-center justify-center shadow-lg ring-4 ${colors.ring}`}>
-            <span className="text-3xl font-bold">{value}</span>
+              );
+            })}
           </div>
         </div>
+      ) : (
+        /* DESKTOP DESIGN (Javascript Controlled) */
+        <div className="relative">
+          <div className="absolute top-1/2 left-0 right-0 h-1 bg-slate-100 dark:bg-slate-700 -translate-y-1/2 rounded-full -z-0"></div>
+          <div className="flex justify-between items-center gap-2 relative z-10">
+            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => {
+              const isActive = value === num;
+              const isLower = num < value;
+              const btnColors = getColorClasses(num);
 
-        {/* Quick Select Buttons */}
-        <div className="grid grid-cols-11 gap-1 mt-4">
-          {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => {
-            const btnColors = getColorClasses(num);
-            return (
-              <button
-                key={num}
-                onClick={() => onChange(num)}
-                className={`h-8 rounded-lg text-xs font-bold transition-all ${value === num
-                    ? `${btnColors.bg} text-white shadow-md scale-110`
-                    : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'
-                  }`}
-              >
-                {num}
-              </button>
-            );
-          })}
+              return (
+                <button
+                  key={num}
+                  onClick={() => onChange(num)}
+                  className={`
+                    relative flex flex-col items-center justify-center transition-all duration-300 group
+                    ${isActive ? 'flex-1 scale-110' : 'w-10 hover:scale-105'}
+                  `}
+                >
+                  <div className={`
+                    w-10 h-14 rounded-xl flex items-center justify-center text-sm font-bold shadow-sm transition-all
+                    ${isActive
+                      ? `${btnColors.bg} text-white shadow-lg ring-4 ${btnColors.ring} -translate-y-2`
+                      : `bg-white dark:bg-slate-800 border-2 ${isLower ? 'border-primary-100 dark:border-slate-700/50 text-slate-400' : 'border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400'} hover:border-primary-300 dark:hover:border-primary-700 hover:-translate-y-1`
+                    }
+                  `}>
+                    {num}
+                  </div>
+                  {isActive && <div className={`absolute -bottom-2 w-1 h-1 rounded-full ${btnColors.bg}`}></div>}
+                </button>
+              )
+            })}
+          </div>
         </div>
-      </div>
-
-      {/* DESKTOP: Horizontal Segmented Control */}
-      <div className="hidden lg:block relative">
-        <div className="absolute top-1/2 left-0 right-0 h-1 bg-slate-100 dark:bg-slate-700 -translate-y-1/2 rounded-full -z-0"></div>
-        <div className="flex justify-between items-center gap-2 relative z-10">
-          {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => {
-            const isActive = value === num;
-            const isLower = num < value;
-            const btnColors = getColorClasses(num);
-
-            return (
-              <button
-                key={num}
-                onClick={() => onChange(num)}
-                className={`
-                  relative flex flex-col items-center justify-center transition-all duration-300 group
-                  ${isActive ? 'flex-1 scale-110' : 'w-10 hover:scale-105'}
-                `}
-              >
-                <div className={`
-                  w-10 h-14 rounded-xl flex items-center justify-center text-sm font-bold shadow-sm transition-all
-                  ${isActive
-                    ? `${btnColors.bg} text-white shadow-lg ring-4 ${btnColors.ring} -translate-y-2`
-                    : `bg-white dark:bg-slate-800 border-2 ${isLower ? 'border-primary-100 dark:border-slate-700/50 text-slate-400' : 'border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400'} hover:border-primary-300 dark:hover:border-primary-700 hover:-translate-y-1`
-                  }
-                `}>
-                  {num}
-                </div>
-                {isActive && <div className={`absolute -bottom-2 w-1 h-1 rounded-full ${btnColors.bg}`}></div>}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+      )}
     </div>
   );
 };
