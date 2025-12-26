@@ -14,14 +14,19 @@ import ReportsView from '../ReportsView';
 import SettingsView from '../SettingsView';
 import { Loader2 } from 'lucide-react';
 import PasswordSetupModal from '../Auth/PasswordSetupModal';
+import AiAssistant from '../AiAssistant';
 
+
+import { useTheme } from '../../contexts/ThemeContext';
 
 const TherapistDashboard: React.FC = () => {
     const navigate = useNavigate();
     const [currentView, setCurrentView] = useState<AppView>(AppView.DASHBOARD);
     const [isMobileOpen, setIsMobileOpen] = useState(false);
     const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
-    const [isDarkMode, setIsDarkMode] = useState(false);
+    // const [isDarkMode, setIsDarkMode] = useState(false); // Managed by Context
+    const { isDarkMode, toggleTheme } = useTheme();
+
     const [therapist, setTherapist] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [showPasswordSetup, setShowPasswordSetup] = useState(false);
@@ -49,11 +54,11 @@ const TherapistDashboard: React.FC = () => {
                 if (profile) {
                     setTherapist(profile);
                 } else {
-                    // Fallback or create default if needed
-                    // For MVP, just set basic info from auth
+                    // Fallback using Auth Metadata (Rich Data)
                     setTherapist({
-                        name: user.email?.split('@')[0] || 'Terapeuta',
+                        name: user.user_metadata?.name || user.email?.split('@')[0] || 'Terapeuta',
                         email: user.email,
+                        phone: user.user_metadata?.phone || '',
                         subscription_status: 'active' // Default or fetch from DB
                     });
                 }
@@ -74,23 +79,12 @@ const TherapistDashboard: React.FC = () => {
 
         // Check if user needs to set a password (for Magic Link users)
         if (user && user.user_metadata && !user.user_metadata.has_set_password) {
-             // Delay slightly to ensure load
+            // Delay slightly to ensure load
             setTimeout(() => setShowPasswordSetup(true), 1000);
         }
 
-        // Theme check
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            setIsDarkMode(true);
-        }
+        // Theme check -> NOW HANDLED BY CONTEXT
     }, [user]);
-
-    useEffect(() => {
-        if (isDarkMode) {
-            document.documentElement.classList.add('dark');
-        } else {
-            document.documentElement.classList.remove('dark');
-        }
-    }, [isDarkMode]);
 
     const handleNavigateToPatient = (id: string) => {
         // This function allows components to switch to the patient view
@@ -149,7 +143,7 @@ const TherapistDashboard: React.FC = () => {
                     setIsMobileOpen(false);
                 }}
                 isDarkMode={isDarkMode}
-                toggleTheme={() => setIsDarkMode(!isDarkMode)}
+                toggleTheme={toggleTheme}
                 onLogout={handleLogout}
             />
 
@@ -183,6 +177,8 @@ const TherapistDashboard: React.FC = () => {
                 isOpen={showPasswordSetup}
                 onSuccess={() => setShowPasswordSetup(false)}
             />
+
+            <AiAssistant currentView={currentView} />
         </div>
     );
 };

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { Moon, Sun } from 'lucide-react';
 
 // Components
@@ -41,36 +42,16 @@ const ProtectedRoute = () => {
 };
 
 function AppContent() {
-  const [darkMode, setDarkMode] = useState(false);
-
-  useEffect(() => {
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      setDarkMode(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [darkMode]);
+  const { isDarkMode, toggleTheme } = useTheme();
 
   return (
-    <div className={`min-h-screen transition-colors duration-300 ${darkMode ? 'dark' : ''}`}>
-      {/* Theme Toggle - Floating */}
-      <button
-        onClick={() => setDarkMode(!darkMode)}
-        className="fixed bottom-6 right-6 z-[100] p-3 rounded-full bg-white dark:bg-slate-800 text-slate-800 dark:text-white shadow-xl border border-slate-200 dark:border-slate-700 hover:scale-110 transition-all duration-300"
-        title={darkMode ? "Ativar Modo Claro" : "Ativar Modo Escuro"}
-      >
-        {darkMode ? <Sun size={24} className="text-yellow-500" /> : <Moon size={24} className="text-slate-600" />}
-      </button>
+    <div className={`min-h-screen transition-colors duration-300 ${isDarkMode ? 'dark' : ''}`}>
+      {/* Theme Toggle - Floating Removed (Duplicate) */}
 
       <Routes>
         {/* Public Routes */}
-        <Route path="/" element={<LandingPage onLoginClick={() => window.location.href = '/login'} isDarkMode={darkMode} toggleTheme={() => setDarkMode(!darkMode)} />} />
+        {/* Pass global theme context down to LandingPage if needed, or update LandingPage to use context too. For now passing props to maintain compatibility. */}
+        <Route path="/" element={<LandingPage onLoginClick={() => window.location.href = '/login'} isDarkMode={isDarkMode} toggleTheme={toggleTheme} />} />
         <Route path="/success" element={<PaymentSuccess />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -78,7 +59,7 @@ function AppContent() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/agendar" element={<BookingWizard />} />
         <Route path="/agendar/:step" element={<BookingWizard />} />
-        <Route path="/paciente/:id" element={<PatientLandingPage isDarkMode={darkMode} toggleTheme={() => setDarkMode(!darkMode)} />} />
+        <Route path="/paciente/:id" element={<PatientLandingPage isDarkMode={isDarkMode} toggleTheme={toggleTheme} />} />
 
         {/* System Test Tool */}
         <Route path="/system-test" element={<SystemTest />} />
@@ -115,9 +96,11 @@ function AppContent() {
 function App() {
   return (
     <Router>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
+      </ThemeProvider>
     </Router>
   );
 }

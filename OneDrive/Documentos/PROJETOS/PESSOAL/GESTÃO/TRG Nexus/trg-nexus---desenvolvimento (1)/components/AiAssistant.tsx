@@ -13,18 +13,8 @@ interface AiAssistantProps {
   currentView?: AppView;
 }
 
-const TRG_KNOWLEDGE_BASE: Record<string, string> = {
-  'anamnese': 'A Anamnese é a fase de coleta de dados. Foque na queixa principal e histórico familiar. Pergunte sobre medicamentos e tratamentos anteriores.',
-  'cronologico': 'No método Cronológico, trabalhamos a linha do tempo. Peça para o cliente fazer o "pior filme" do período. Use a escala SUD para medir o desconforto.',
-  'somatico': 'O método Somático foca na dor física. "Onde dói? Qual a cor/forma da dor?". Peça para o cliente mergulhar na sensação.',
-  'tematico': 'Use o Temático para medos específicos (altura, animais, situações). É ótimo para fobias pontuais.',
-  'futuro': 'Na Ponte ao Futuro, validamos se o trauma foi resolvido. O cliente deve imaginar o futuro sem desconforto.',
-  'potencializacao': 'Instalação de recursos positivos. Coragem, Força, Calma. Use para fechar a sessão com alta energia.',
-  'financeiro': 'Para gerenciar pagamentos, vá até o módulo Financeiro no menu lateral. Você pode emitir recibos e criar links de pagamento.',
-  'marketing': 'No módulo de Marketing, você pode gerenciar leads e gerar conteúdo com IA. Use o Kanban para mover leads até o fechamento.',
-  'agenda': 'Use o botão de "Otimização Inteligente" na Agenda para reagrupar horários e diminuir janelas ociosas.',
-  'default': 'Sou o Nexus AI. Posso ajudar com dúvidas sobre o Protocolo TRG, scripts de sessão, financeiro ou marketing. Como posso ajudar?'
-};
+// TRG Knowledge Base deprecated in favor of Real AI (Gemini)
+// const TRG_KNOWLEDGE_BASE = ...
 
 const CONTEXT_SUGGESTIONS: Record<string, string[]> = {
   'dashboard': ['Como aumentar minha retenção?', 'Previsão de receita', 'Dicas de produtividade'],
@@ -46,7 +36,7 @@ const AiAssistant: React.FC<AiAssistantProps> = ({ currentView = AppView.DASHBOA
   ]);
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  
+
   // Context Detection
   const [currentContext, setCurrentContext] = useState<string>(currentView);
 
@@ -72,25 +62,42 @@ const AiAssistant: React.FC<AiAssistantProps> = ({ currentView = AppView.DASHBOA
     setInputValue('');
     setIsTyping(true);
 
-    setTimeout(() => {
-      let responseText = TRG_KNOWLEDGE_BASE['default'];
-      const lowerInput = textToSend.toLowerCase();
-
-      Object.keys(TRG_KNOWLEDGE_BASE).forEach(key => {
-        if (lowerInput.includes(key)) {
-          responseText = TRG_KNOWLEDGE_BASE[key];
-        }
+    try {
+      const response = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [...messages, userMsg], // Send history
+          context: currentContext
+        })
       });
 
-      const aiMsg: Message = { id: (Date.now() + 1).toString(), role: 'ai', text: responseText };
+      if (!response.ok) throw new Error('Falha na comunicação com a IA');
+
+      const data = await response.json();
+
+      const aiMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'ai',
+        text: data.reply || 'Desculpe, não consegui processar sua solicitação agora.'
+      };
       setMessages(prev => [...prev, aiMsg]);
+
+    } catch (error) {
+      console.error('Chat AI Error:', error);
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 1).toString(),
+        role: 'ai',
+        text: '❌ Erro de conexão com o servidor de IA. Tente novamente.'
+      }]);
+    } finally {
       setIsTyping(false);
-    }, 1500);
+    }
   };
 
   if (!isOpen) {
     return (
-      <button 
+      <button
         onClick={() => setIsOpen(true)}
         className="fixed bottom-6 right-6 z-[90] w-14 h-14 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full shadow-2xl flex items-center justify-center text-white hover:scale-110 transition-transform active:scale-95 animate-fade-in group"
       >
@@ -123,9 +130,9 @@ const AiAssistant: React.FC<AiAssistantProps> = ({ currentView = AppView.DASHBOA
             <div ref={messagesEndRef} />
           </div>
           <div className="p-2 bg-slate-50 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 overflow-x-auto flex gap-2 no-scrollbar">
-             {(CONTEXT_SUGGESTIONS[currentContext] || CONTEXT_SUGGESTIONS['dashboard']).map((sugg, i) => (
-                <button key={i} onClick={() => handleSendMessage(undefined, sugg)} className="whitespace-nowrap px-3 py-1.5 bg-white dark:bg-slate-800 border border-indigo-100 dark:border-slate-700 rounded-full text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-slate-700 transition-colors flex items-center gap-1"><Zap size={10} /> {sugg}</button>
-             ))}
+            {(CONTEXT_SUGGESTIONS[currentContext] || CONTEXT_SUGGESTIONS['dashboard']).map((sugg, i) => (
+              <button key={i} onClick={() => handleSendMessage(undefined, sugg)} className="whitespace-nowrap px-3 py-1.5 bg-white dark:bg-slate-800 border border-indigo-100 dark:border-slate-700 rounded-full text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-slate-700 transition-colors flex items-center gap-1"><Zap size={10} /> {sugg}</button>
+            ))}
           </div>
           <form onSubmit={handleSendMessage} className="p-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shrink-0">
             <div className="relative">

@@ -81,7 +81,15 @@ const SettingsView: React.FC = () => {
     const loadSettings = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        // Fetch Therapist Profile
+        // Pre-fill from Auth Metadata first (Ensures data visibility)
+        setFormData(prev => ({
+          ...prev,
+          name: user.user_metadata.name || prev.name,
+          email: user.email || prev.email,
+          phone: user.user_metadata.phone || prev.phone
+        }));
+
+        // Fetch Therapist Profile from DB
         const { data: profile, error } = await supabase
           .from('therapists')
           .select('*')
@@ -95,7 +103,7 @@ const SettingsView: React.FC = () => {
             specialty: profile.specialty || 'Geral',
             is_verified: profile.is_verified || false,
             is_overflow_source: profile.is_overflow_source || false,
-            is_overflow_target: profile.is_overflow_target || true,
+            is_overflow_target: typeof profile.is_overflow_target !== 'undefined' ? profile.is_overflow_target : true,
             // Map other fields if they exist in DB schema...
           }));
         }

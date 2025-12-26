@@ -1,4 +1,4 @@
-export const getEmailTemplate = (plan: string, name: string) => {
+export const getEmailTemplate = (plan: string, name: string, magicLink?: string) => {
     const primaryColor = '#0f172a'; // Slate 900
     const accentColor = '#3b82f6';  // Blue 500
     const footerColor = '#64748b';  // Slate 500
@@ -39,7 +39,8 @@ export const getEmailTemplate = (plan: string, name: string) => {
     `;
 
     let title, subject, content;
-    const loginUrl = process.env.VITE_APP_URL ? `${process.env.VITE_APP_URL}/login` : 'https://trg-nexus.vercel.app/login';
+    // Use the provided magicLink if available, otherwise fallback to the standard login URL
+    const loginUrl = magicLink || (process.env.VITE_APP_URL ? `${process.env.VITE_APP_URL}/login` : 'https://trg-nexus.vercel.app/login');
 
     switch (plan) {
         case 'price_1ScuH5KPo7EypB7VQ7epTjiW': // Estágio

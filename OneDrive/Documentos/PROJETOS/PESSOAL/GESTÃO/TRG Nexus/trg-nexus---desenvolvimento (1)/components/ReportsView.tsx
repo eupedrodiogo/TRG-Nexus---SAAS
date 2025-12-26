@@ -1,337 +1,485 @@
 import React, { useState, useEffect } from 'react';
 import {
-   FileBarChart2,
-   Search,
-   Download,
-   Plus,
-   Calendar,
-   CheckCircle2,
-   FileText,
-   Printer,
-   Sparkles,
-   TrendingDown,
-   ArrowRight,
-   History
-} from 'lucide-react';
+   FiFileText, FiDownload, FiShare2, FiClock, FiCheckCircle,
+   FiAlertCircle, FiRefreshCw, FiBook, FiList, FiTrash2, FiUser, FiActivity
+} from 'react-icons/fi';
+import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
+import { Line } from 'react-chartjs-2';
 import {
-   AreaChart,
-   Area,
-   XAxis,
-   CartesianGrid,
+   Chart as ChartJS,
+   CategoryScale,
+   LinearScale,
+   PointElement,
+   LineElement,
+   Title,
    Tooltip,
-   ResponsiveContainer,
-} from 'recharts';
+   Legend,
+   Filler
+} from 'chart.js';
 
-// Mock Data specific for reports
-const SUD_EVOLUTION_DATA = [
-   { sessao: 'Sessão 1', sud: 9, bemEstar: 2 },
-   { sessao: 'Sessão 2', sud: 8, bemEstar: 3 },
-   { sessao: 'Sessão 3', sud: 6, bemEstar: 5 },
-   { sessao: 'Sessão 4', sud: 4, bemEstar: 7 },
-   { sessao: 'Sessão 5', sud: 1, bemEstar: 9 },
-];
+ChartJS.register(
+   CategoryScale,
+   LinearScale,
+   PointElement,
+   LineElement,
+   Title,
+   Tooltip,
+   Legend,
+   Filler
+);
 
-const REPORT_TEMPLATES = [
-   { id: 'evolution', title: 'Relatório de Evolução Clínica', desc: 'Análise detalhada do progresso com gráficos SUD e notas.', icon: FileBarChart2, color: 'bg-blue-500' },
-   { id: 'statement', title: 'Declaração de Comparecimento', desc: 'Documento simples atestando presença nas sessões.', icon: Calendar, color: 'bg-green-500' },
-   { id: 'laudo', title: 'Laudo Técnico Psicológico', desc: 'Documento formal para fins médicos ou jurídicos.', icon: FileText, color: 'bg-purple-500' },
-];
+interface Report {
+   id: string;
+   title: string;
+   type: string;
+   content: string;
+   created_at: string;
+   status: string;
+}
 
-const ReportsView: React.FC = () => {
-   const [step, setStep] = useState<'list' | 'create' | 'preview'>('list');
-   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
-   const [selectedPatient, setSelectedPatient] = useState<string>('');
-   const [reportText, setReportText] = useState('');
-   const [isGeneratingText, setIsGeneratingText] = useState(false);
-   const [patients, setPatients] = useState<any[]>([]);
-   const [sudData, setSudData] = useState<any[]>([]);
+interface Patient {
+   id: string;
+   name: string;
+   email?: string;
+   phone?: string;
+   status?: string;
+   nextSession?: string;
+   avatar?: string;
+}
+
+export function ReportsView() {
+   const { user } = useAuth();
+   const { isDarkMode } = useTheme();
+   // Default to dark mode handling via Tailwind 'dark:' classes if system supports it,
+   // but here we just use standard utility classes that look good in both or prioritize one.
+   // Assuming the app has a dark/light toggle class on root.
+
+   const [patients, setPatients] = useState<Patient[]>([]);
+   const [selectedPatient, setSelectedPatient] = useState('');
+   const [reportType, setReportType] = useState('evolution');
+   const [loading, setLoading] = useState(false);
+   const [generating, setGenerating] = useState(false);
+   const [currentReport, setCurrentReport] = useState('');
+   const [savedReports, setSavedReports] = useState<Report[]>([]);
+   const [loadingHistory, setLoadingHistory] = useState(false);
+   const [sudData, setSudData] = useState<number[]>([]);
+   const [sudLabels, setSudLabels] = useState<string[]>([]);
 
    useEffect(() => {
-      const fetchPatients = async () => {
-         try {
-            const therapistStr = localStorage.getItem('therapist');
-            if (!therapistStr) return;
-            const therapist = JSON.parse(therapistStr);
-            const response = await fetch(`/api/patients?therapistId=${therapist.id}`);
-            if (response.ok) {
-               const data = await response.json();
-               setPatients(data);
-            }
-         } catch (error) {
-            console.error('Error fetching patients:', error);
-         }
-      };
-      fetchPatients();
+      loadPatients();
    }, []);
 
-   // Fetch patient details when selected to get SUD data
    useEffect(() => {
-      if (!selectedPatient) return;
-      const fetchDetails = async () => {
-         try {
-            const response = await fetch(`/api/patient-details?patientId=${selectedPatient}`);
-            if (response.ok) {
-               const data = await response.json();
-               // Transform timeline to SUD data if possible, or leave empty
-               // For now, we don't have explicit SUD history in DB, so we'll leave it empty or mock 0
-               setSudData([]);
-            }
-         } catch (e) { console.error(e); }
-      };
-      fetchDetails();
+      if (selectedPatient) {
+         loadPatientData(selectedPatient);
+         loadReports(selectedPatient);
+      } else {
+         setSavedReports([]);
+         setCurrentReport('');
+      }
    }, [selectedPatient]);
 
-   // --- Mock Generation Logic ---
-   const handleGenerateAI = () => {
-      setIsGeneratingText(true);
-      setTimeout(() => {
-         setReportText(
-            `RESUMO CLÍNICO\n\n` +
-            `O paciente ${patients.find(p => p.id === selectedPatient)?.name || 'selecionado'} apresentou evolução significativa ao longo das últimas 5 sessões. ` +
-            `Iniciou o tratamento com queixa principal de ansiedade generalizada e traumas de infância (Método Cronológico), apresentando SUD inicial de nível 9.\n\n` +
-            `Durante o reprocessamento, observou-se uma redução progressiva da carga emocional associada aos eventos traumáticos. ` +
-            `Na fase Somática, o paciente relatou diminuição das tensões físicas. Atualmente, encontra-se estável, com SUD residual próximo a 1 e aumento perceptível nos índices de bem-estar.\n\n` +
-            `Recomenda-se a continuidade do protocolo para a fase de Potencialização.`
-         );
-         setIsGeneratingText(false);
-      }, 1500);
+   const loadPatients = async () => {
+      try {
+         setLoading(true);
+         const response = await fetch(`/api/patients?therapistId=${user?.id || 'demo-therapist'}`);
+         if (response.ok) {
+            const data = await response.json();
+            setPatients(data);
+         }
+      } catch (error) {
+         console.error('Failed to load patients', error);
+      } finally {
+         setLoading(false);
+      }
    };
 
-   const handleStartCreate = () => {
-      setStep('create');
-      setSelectedTemplate(null);
-      setSelectedPatient('');
-      setReportText('');
+   const loadReports = async (patientId: string) => {
+      try {
+         setLoadingHistory(true);
+         const therapistId = user?.id || 'demo-therapist';
+         const res = await fetch(`/api/reports?therapistId=${therapistId}&patientId=${patientId}`);
+         if (res.ok) {
+            const data = await res.json();
+            setSavedReports(data);
+         }
+      } catch (err) {
+         console.error('Error loading reports:', err);
+      } finally {
+         setLoadingHistory(false);
+      }
+   }
+
+   const loadPatientData = async (patientId: string) => {
+      // Mock SUD data
+      setSudLabels(['Sessão 1', 'Sessão 2', 'Sessão 3', 'Sessão 4', 'Sessão 5']);
+      setSudData([8, 7, 5, 4, 2]);
    };
 
-   const handleSelectTemplate = (id: string) => {
-      setSelectedTemplate(id);
+   const handleGenerate = async () => {
+      if (!selectedPatient) return;
+
+      setGenerating(true);
+      try {
+         const patient = patients.find(p => p.id === selectedPatient);
+
+         const response = await fetch('/api/ai/report', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+               patientId: selectedPatient,
+               patientName: patient?.name || 'Paciente',
+               reportType,
+               therapistId: user?.id || 'demo-therapist'
+            })
+         });
+
+         if (response.ok) {
+            const data = await response.json();
+            setCurrentReport(data.report);
+            await saveReport(data.report, patient?.name);
+         } else {
+            alert('Erro ao gerar relatório. Tente novamente.');
+         }
+      } catch (error) {
+         console.error('AI generation error:', error);
+         alert('Erro de conexão com a IA.');
+      } finally {
+         setGenerating(false);
+      }
    };
 
-   const canProceedToPreview = selectedTemplate && selectedPatient;
+   const saveReport = async (content: string, patientName?: string) => {
+      try {
+         const res = await fetch('/api/reports', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+               therapistId: user?.id || 'demo-therapist',
+               patientId: selectedPatient,
+               title: `Relatório ${reportType === 'evolution' ? 'de Evolução' : 'Laudo'} - ${new Date().toLocaleDateString()}`,
+               type: reportType,
+               content: content,
+               metadata: { generated_by_ai: true }
+            })
+         });
+
+         if (res.ok) {
+            loadReports(selectedPatient);
+         }
+      } catch (err) {
+         console.error('Error saving report:', err);
+      }
+   };
+
+   const handleDeleteReport = async (id: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (!confirm('Tem certeza que deseja excluir este relatório?')) return;
+
+      try {
+         const res = await fetch(`/api/reports?id=${id}`, { method: 'DELETE' });
+         if (res.ok) {
+            setSavedReports(prev => prev.filter(r => r.id !== id));
+            if (currentReport && savedReports.find(r => r.id === id)?.content === currentReport) {
+               setCurrentReport('');
+            }
+         }
+      } catch (err) {
+         console.error('Error deleting report:', err);
+      }
+   };
+
+   const handleDownload = () => {
+      alert("Funcionalidade de PDF em breve!");
+   };
+
+   const chartData = {
+      labels: sudLabels,
+      datasets: [
+         {
+            label: 'Nível de Desconforto (SUD)',
+            data: sudData,
+            borderColor: '#6366f1', // Indigo 500
+            backgroundColor: 'rgba(99, 102, 241, 0.1)',
+            tension: 0.4,
+            fill: true,
+            pointBackgroundColor: '#fff',
+            pointBorderColor: '#6366f1',
+            pointBorderWidth: 2,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+         }
+      ]
+   };
+
+   const chartOptions = {
+      responsive: true,
+      plugins: {
+         legend: { display: false },
+         tooltip: {
+            backgroundColor: '#1e293b',
+            padding: 12,
+            titleFont: { size: 13 },
+            bodyFont: { size: 12 },
+            displayColors: false,
+            cornerRadius: 8,
+         }
+      },
+      scales: {
+         y: {
+            min: 0,
+            max: 10,
+            grid: { color: 'rgba(148, 163, 184, 0.1)' },
+            ticks: { color: '#94a3b8', font: { size: 11 } },
+            border: { display: false }
+         },
+         x: {
+            grid: { display: false },
+            ticks: { color: '#94a3b8', font: { size: 11 } },
+            border: { display: false }
+         }
+      },
+      maintainAspectRatio: false,
+   };
 
    return (
-      <div className="space-y-6 animate-fade-in pb-20 md:pb-0 relative">
-
-         {/* Header */}
-         <div className="flex flex-col md:flex-row justify-between gap-4">
+      <div className="p-4 md:p-8 max-w-[1600px] mx-auto min-h-screen text-slate-800 dark:text-slate-100">
+         {/* Header Section */}
+         <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 animate-fade-in-up">
             <div>
-               <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Relatórios Inteligentes</h1>
-               <p className="text-slate-500 dark:text-slate-400 text-sm">Gere laudos, declarações e análises de evolução com dados reais.</p>
+               <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-400 bg-clip-text text-transparent flex items-center gap-3">
+                  <div className="p-2 bg-indigo-500/10 rounded-xl text-indigo-500">
+                     <FiBook className="w-8 h-8" />
+                  </div>
+                  Relatórios Inteligentes (IA)
+               </h1>
+               <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm md:text-base max-w-2xl">
+                  Geração automatizada de laudos, evoluções e documentos clínicos baseados em histórico.
+               </p>
             </div>
-            {step === 'list' && (
-               <button
-                  onClick={handleStartCreate}
-                  className="bg-primary-600 dark:bg-secondary-600 hover:bg-primary-700 dark:hover:bg-secondary-700 text-white px-6 py-2.5 rounded-xl shadow-lg shadow-primary-500/20 dark:shadow-secondary-600/20 transition-all flex items-center gap-2 active:scale-95 font-bold"
-               >
-                  <Plus size={18} /> Novo Relatório
-               </button>
-            )}
-            {step !== 'list' && (
-               <button
-                  onClick={() => setStep('list')}
-                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors font-bold text-sm"
-               >
-                  Cancelar
-               </button>
-            )}
-         </div>
+         </header>
 
-         {/* --- STEP 1: LIST / DASHBOARD --- */}
-         {step === 'list' && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-               {/* Stats Cards */}
-               <div className="bg-gradient-to-br from-primary-500 to-primary-700 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
-                  <div className="relative z-10">
-                     <div className="p-3 bg-white/20 w-fit rounded-xl mb-4"><FileBarChart2 size={24} /></div>
-                     <h3 className="text-3xl font-bold mb-1">12</h3>
-                     <p className="text-primary-100 text-sm font-medium">Relatórios gerados este mês</p>
-                  </div>
-                  <div className="absolute -right-4 -bottom-4 opacity-10"><FileBarChart2 size={120} /></div>
-               </div>
+         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
 
-               <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
-                  <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
-                     <h3 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2">
-                        <History size={18} className="text-slate-400" /> Recentes
-                     </h3>
-                     <button className="text-xs font-bold text-primary-600 dark:text-secondary-400 hover:underline">Ver Todos</button>
-                  </div>
-                  <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                     {[
-                        { id: 1, name: 'Laudo - Ana Silva', type: 'Laudo Técnico', date: 'Hoje', status: 'Finalizado' },
-                        { id: 2, name: 'Evolução - Carlos O.', type: 'Relatório Clínico', date: 'Ontem', status: 'Finalizado' },
-                        { id: 3, name: 'Declaração - Mariana S.', type: 'Declaração', date: '20 Out', status: 'Rascunho' },
-                     ].map((rep) => (
-                        <div key={rep.id} className="p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer group">
-                           <div className="flex items-center gap-4">
-                              <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-500 group-hover:text-primary-500 dark:group-hover:text-secondary-400 transition-colors">
-                                 <FileText size={20} />
-                              </div>
-                              <div>
-                                 <p className="font-bold text-slate-800 dark:text-white text-sm">{rep.name}</p>
-                                 <p className="text-xs text-slate-500">{rep.type} • {rep.date}</p>
-                              </div>
-                           </div>
-                           <div className="flex items-center gap-3">
-                              <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${rep.status === 'Finalizado' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'}`}>
-                                 {rep.status}
-                              </span>
-                              <button className="p-2 text-slate-400 hover:text-primary-600 dark:hover:text-secondary-400"><Download size={16} /></button>
+            {/* Left Controls Column (4/12) */}
+            <div className="lg:col-span-4 space-y-6">
+               {/* Patient & Type Selection Card */}
+               <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-800 backdrop-blur-xl transition-all hover:shadow-md">
+                  <h2 className="text-lg font-bold mb-5 flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                     <span className="w-1 h-6 bg-indigo-500 rounded-full"></span>
+                     Configuração
+                  </h2>
+
+                  <div className="space-y-5">
+                     {/* Patient Select */}
+                     <div className="space-y-2">
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 ml-1">Paciente</label>
+                        <div className="relative group">
+                           <FiUser className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-hover:text-indigo-500 transition-colors" />
+                           <select
+                              value={selectedPatient}
+                              onChange={(e) => setSelectedPatient(e.target.value)}
+                              className="w-full pl-11 pr-4 py-3.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all font-medium text-slate-700 dark:text-slate-200 appearance-none cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800"
+                           >
+                              <option value="">Selecione um paciente...</option>
+                              {patients.map(p => (
+                                 <option key={p.id} value={p.id}>{p.name}</option>
+                              ))}
+                           </select>
+                           <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none opacity-50">
+                              <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
                            </div>
                         </div>
-                     ))}
+                     </div>
+
+                     {/* Type Select */}
+                     <div className="space-y-2">
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 ml-1">Tipo de Documento</label>
+                        <div className="grid grid-cols-2 gap-3">
+                           {['evolution', 'laudo', 'atestado', 'encaminhamento'].map(type => (
+                              <button
+                                 key={type}
+                                 onClick={() => setReportType(type)}
+                                 className={`py-3 px-2 text-sm font-semibold rounded-xl border-2 transition-all duration-200 ${reportType === type
+                                    ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                                    : 'border-transparent bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-600 dark:text-slate-400'
+                                    }`}
+                              >
+                                 {type === 'evolution' ? 'Evolução' : type.charAt(0).toUpperCase() + type.slice(1)}
+                              </button>
+                           ))}
+                        </div>
+                     </div>
+
+                     <button
+                        onClick={handleGenerate}
+                        disabled={!selectedPatient || generating}
+                        className={`w-full py-4 px-6 rounded-2xl flex items-center justify-center gap-3 font-bold text-white transition-all transform active:scale-95 shadow-lg shadow-indigo-500/25 ${!selectedPatient
+                           ? 'bg-slate-300 dark:bg-slate-700 cursor-not-allowed shadow-none'
+                           : generating
+                              ? 'bg-indigo-400 cursor-wait'
+                              : 'bg-gradient-to-tr from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 hover:shadow-indigo-500/40'
+                           }`}
+                     >
+                        {generating ? (
+                           <><FiRefreshCw className="animate-spin w-5 h-5" /> Gerando Documento...</>
+                        ) : (
+                           <><FiActivity className="w-5 h-5" /> Gerar com Nexus IA</>
+                        )}
+                     </button>
                   </div>
                </div>
-            </div>
-         )}
 
-         {/* --- STEP 2: CREATE WIZARD --- */}
-         {step === 'create' && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+               {/* History Card */}
+               <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col h-[400px]">
+                  <h2 className="text-lg font-bold mb-1 flex items-center justify-between text-slate-700 dark:text-slate-200">
+                     <span className="flex items-center gap-2">
+                        <FiClock className="text-slate-400" /> Histórico
+                     </span>
+                     {savedReports.length > 0 && (
+                        <span className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full text-slate-500 font-medium">
+                           {savedReports.length}
+                        </span>
+                     )}
+                  </h2>
 
-               {/* Left: Configuration */}
-               <div className="lg:col-span-4 space-y-6">
-                  <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm animate-slide-up">
-                     <h3 className="font-bold text-slate-800 dark:text-white mb-4">1. Selecione o Paciente</h3>
-                     <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                        <select
-                           className="w-full pl-10 p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-primary-500 dark:text-white appearance-none cursor-pointer"
-                           value={selectedPatient}
-                           onChange={(e) => setSelectedPatient(e.target.value)}
-                        >
-                           <option value="" disabled>Buscar paciente...</option>
-                           {patients.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
-                     </div>
-                  </div>
-
-                  <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm animate-slide-up" style={{ animationDelay: '0.1s' }}>
-                     <h3 className="font-bold text-slate-800 dark:text-white mb-4">2. Tipo de Documento</h3>
-                     <div className="space-y-3">
-                        {REPORT_TEMPLATES.map(template => (
+                  <div className="flex-1 overflow-y-auto pr-2 mt-4 space-y-3 custom-scrollbar">
+                     {loadingHistory ? (
+                        <div className="flex flex-col items-center justify-center h-full opacity-50 gap-2">
+                           <FiRefreshCw className="animate-spin" />
+                           <span className="text-xs">Atualizando...</span>
+                        </div>
+                     ) : savedReports.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-full text-slate-400 border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-2xl">
+                           <FiList className="w-8 h-8 mb-2 opacity-50" />
+                           <span className="text-sm font-medium">Sem histórico</span>
+                        </div>
+                     ) : (
+                        savedReports.map(report => (
                            <div
-                              key={template.id}
-                              onClick={() => handleSelectTemplate(template.id)}
-                              className={`p-3 rounded-xl border cursor-pointer transition-all flex items-start gap-3 ${selectedTemplate === template.id
-                                 ? 'bg-primary-50 dark:bg-slate-800 border-primary-500 dark:border-secondary-500 ring-1 ring-primary-500 dark:ring-secondary-500'
-                                 : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800'
+                              key={report.id}
+                              onClick={() => setCurrentReport(report.content)}
+                              className={`p-4 rounded-xl border transition-all cursor-pointer group hover:shadow-md ${currentReport === report.content
+                                 ? 'bg-indigo-50 dark:bg-indigo-900/10 border-indigo-200 dark:border-indigo-800/50'
+                                 : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700/50 hover:border-indigo-200 dark:hover:border-indigo-800'
                                  }`}
                            >
-                              <div className={`p-2 rounded-lg text-white shrink-0 ${template.color}`}>
-                                 <template.icon size={18} />
+                              <div className="flex justify-between items-start">
+                                 <div className="min-w-0">
+                                    <h4 className={`font-semibold text-sm truncate ${currentReport === report.content ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-700 dark:text-slate-200'
+                                       }`}>
+                                       {report.title}
+                                    </h4>
+                                    <div className="flex items-center gap-2 mt-1.5">
+                                       <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500">
+                                          {report.type}
+                                       </span>
+                                       <span className="text-xs text-slate-400 flex items-center gap-1">
+                                          <FiClock className="w-3 h-3" />
+                                          {new Date(report.created_at).toLocaleDateString()}
+                                       </span>
+                                    </div>
+                                 </div>
+                                 <button
+                                    onClick={(e) => handleDeleteReport(report.id, e)}
+                                    className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all opacity-0 group-hover:opacity-100"
+                                    title="Excluir"
+                                 >
+                                    <FiTrash2 className="w-4 h-4" />
+                                 </button>
                               </div>
-                              <div>
-                                 <h4 className="font-bold text-sm text-slate-800 dark:text-white">{template.title}</h4>
-                                 <p className="text-xs text-slate-500 dark:text-slate-400 leading-tight mt-1">{template.desc}</p>
-                              </div>
-                              {selectedTemplate === template.id && <CheckCircle2 size={18} className="text-primary-600 dark:text-secondary-400 ml-auto" />}
                            </div>
-                        ))}
-                     </div>
-                  </div>
-
-                  <button
-                     disabled={!canProceedToPreview}
-                     onClick={() => setStep('preview')}
-                     className="w-full py-4 bg-slate-900 dark:bg-slate-700 text-white font-bold rounded-xl shadow-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-800 dark:hover:bg-slate-600 transition-all flex items-center justify-center gap-2"
-                  >
-                     Continuar <ArrowRight size={18} />
-                  </button>
-               </div>
-
-               {/* Right: Preview / Placeholder */}
-               <div className="lg:col-span-8 bg-slate-100 dark:bg-slate-950/50 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-800 flex items-center justify-center min-h-[500px]">
-                  <div className="text-center max-w-xs opacity-50">
-                     <FileBarChart2 size={64} className="mx-auto mb-4 text-slate-400" />
-                     <h3 className="text-lg font-bold text-slate-600 dark:text-slate-400">Visualização</h3>
-                     <p className="text-sm text-slate-500">Selecione um paciente e um modelo para começar a editar o relatório.</p>
+                        ))
+                     )}
                   </div>
                </div>
             </div>
-         )}
 
-         {/* --- STEP 3: PREVIEW & EDIT --- */}
-         {step === 'preview' && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-slide-up">
+            {/* Right Content Column (8/12) */}
+            <div className="lg:col-span-8 flex flex-col gap-6">
 
-               {/* Editor */}
-               <div className="lg:col-span-7 space-y-6">
-
-                  {/* AI Generator Card */}
-                  <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-6 rounded-2xl text-white shadow-lg relative overflow-hidden">
-                     <div className="relative z-10 flex justify-between items-center">
-                        <div>
-                           <h3 className="font-bold text-lg flex items-center gap-2"><Sparkles size={18} /> Assistente IA</h3>
-                           <p className="text-indigo-100 text-xs">Gere um resumo clínico automático baseado nas notas.</p>
-                        </div>
+               {/* Editor/Preview Card */}
+               <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-lg shadow-slate-200/50 dark:shadow-black/20 border border-slate-100 dark:border-slate-800 flex flex-col flex-1 min-h-[500px] overflow-hidden">
+                  {/* Toolbar */}
+                  <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
+                     <h2 className="font-bold text-slate-700 dark:text-white flex items-center gap-2">
+                        <span className={`flex items-center justify-center w-6 h-6 rounded-full text-xs ${currentReport ? 'bg-green-100 text-green-600' : 'bg-slate-200 text-slate-500'}`}>
+                           {currentReport ? <FiCheckCircle /> : <FiAlertCircle />}
+                        </span>
+                        Visualização
+                        {generating && <span className="text-xs font-normal text-indigo-500 animate-pulse ml-2">• Escrevendo...</span>}
+                     </h2>
+                     <div className="flex gap-3">
                         <button
-                           onClick={handleGenerateAI}
-                           disabled={isGeneratingText}
-                           className="px-4 py-2 bg-white text-indigo-600 font-bold rounded-lg text-sm hover:bg-indigo-50 transition-colors flex items-center gap-2"
+                           onClick={handleDownload}
+                           disabled={!currentReport}
+                           className="px-4 py-2 rounded-xl text-sm font-semibold border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-white hover:shadow-sm dark:hover:bg-slate-800 transition-all flex items-center gap-2 disabled:opacity-50"
                         >
-                           {isGeneratingText ? 'Gerando...' : 'Gerar Resumo'}
+                           <FiDownload className="w-4 h-4" /> PDF
+                        </button>
+                        <button className="px-4 py-2 rounded-xl text-sm font-semibold bg-slate-800 dark:bg-slate-700 text-white hover:bg-slate-700 dark:hover:bg-slate-600 shadow-md shadow-slate-300/20 dark:shadow-none transition-all flex items-center gap-2 disabled:opacity-50">
+                           <FiShare2 className="w-4 h-4" /> Compartilhar
                         </button>
                      </div>
-                     {/* Decor */}
-                     <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
                   </div>
 
-                  <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
-                     <h3 className="font-bold text-slate-800 dark:text-white mb-4">Conteúdo do Relatório</h3>
-                     <textarea
-                        className="w-full h-[400px] p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-primary-500 dark:text-white resize-none font-serif leading-relaxed text-base"
-                        placeholder="O conteúdo do relatório aparecerá aqui..."
-                        value={reportText}
-                        onChange={(e) => setReportText(e.target.value)}
-                     />
+                  {/* Editor Area */}
+                  <div className="flex-1 relative bg-slate-50/30 dark:bg-slate-950/30">
+                     {currentReport ? (
+                        <textarea
+                           value={currentReport}
+                           onChange={(e) => setCurrentReport(e.target.value)}
+                           className="w-full h-full p-8 resize-none font-serif text-lg leading-loose text-slate-800 dark:text-slate-200 outline-none bg-transparent"
+                           placeholder="Comece a escrever..."
+                        />
+                     ) : (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 p-8 text-center">
+                           <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-6 animate-pulse-slow">
+                              <FiFileText className="w-8 h-8 opacity-40" />
+                           </div>
+                           <h3 className="text-xl font-bold text-slate-600 dark:text-slate-400 mb-2">Nenhum documento selecionado</h3>
+                           <p className="max-w-md text-slate-400 text-sm leading-relaxed">
+                              Selecione um paciente na barra lateral e clique em <strong className="text-indigo-500">Gerar com Nexus IA</strong> para criar um novo relatório clínico, ou selecione um item do histórico.
+                           </p>
+                        </div>
+                     )}
                   </div>
+
+                  {/* Footer Status */}
+                  {currentReport && (
+                     <div className="px-6 py-3 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-xs text-slate-400">
+                        <span>{currentReport.length} caracteres</span>
+                        <button
+                           onClick={() => saveReport(currentReport)}
+                           className="text-indigo-500 font-bold hover:underline"
+                        >
+                           Salvar Alterações
+                        </button>
+                     </div>
+                  )}
                </div>
 
-               {/* Visuals & Export */}
-               <div className="lg:col-span-5 space-y-6">
-                  <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
-                     <h3 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-                        <TrendingDown size={18} className="text-green-500" /> Evolução do SUD
+               {/* Chart Section */}
+               <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center justify-between mb-6">
+                     <h3 className="font-bold text-slate-700 dark:text-white flex items-center gap-2">
+                        <FiActivity className="text-indigo-500" />
+                        Evolução Clínica (SUD)
                      </h3>
-                     <div className="h-[200px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                           <AreaChart data={sudData}>
-                              <defs>
-                                 <linearGradient id="colorSud" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
-                                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-                                 </linearGradient>
-                                 <linearGradient id="colorBemEstar" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                                 </linearGradient>
-                              </defs>
-                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" opacity={0.1} />
-                              <XAxis dataKey="sessao" hide />
-                              <Tooltip contentStyle={{ borderRadius: '8px' }} />
-                              <Area type="monotone" dataKey="sud" name="SUD (Desconforto)" stroke="#ef4444" fillOpacity={1} fill="url(#colorSud)" />
-                              <Area type="monotone" dataKey="bemEstar" name="Bem-Estar" stroke="#10b981" fillOpacity={1} fill="url(#colorBemEstar)" />
-                           </AreaChart>
-                        </ResponsiveContainer>
-                     </div>
+                     <select className="text-xs bg-slate-50 dark:bg-slate-800 border-none rounded-lg px-2 py-1 font-medium text-slate-500 cursor-pointer outline-none">
+                        <option>Últimas 5 sessões</option>
+                        <option>Todo o período</option>
+                     </select>
                   </div>
-
-                  <div className="flex flex-col gap-3">
-                     <button className="w-full py-3 bg-slate-800 dark:bg-slate-700 text-white font-bold rounded-xl shadow-lg hover:bg-slate-900 dark:hover:bg-slate-600 transition-all flex items-center justify-center gap-2">
-                        <Download size={18} /> Baixar PDF
-                     </button>
-                     <button className="w-full py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center justify-center gap-2">
-                        <Printer size={18} /> Imprimir
-                     </button>
+                  <div className="h-64 w-full">
+                     <Line data={chartData} options={chartOptions} />
                   </div>
                </div>
             </div>
-         )}
-
+         </div>
       </div>
    );
-};
+}
 
 export default ReportsView;

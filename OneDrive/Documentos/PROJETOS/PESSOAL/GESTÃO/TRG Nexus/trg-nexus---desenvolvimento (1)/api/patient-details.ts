@@ -28,6 +28,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return res.status(400).json({ error: 'Missing patientId' });
         }
 
+        // Handle Demo Patient for AI Reports
+        if (patientId === 'demo') {
+            return res.status(200).json({
+                timeline: [
+                    { id: 'demo1', type: 'session', date: new Date().toISOString(), title: 'Sessão - TRG', desc: 'Status: Concluída. Evolução positiva.', status: 'Concluída' }
+                ],
+                financial: {
+                    totalInvested: 1000,
+                    pending: 0,
+                    history: []
+                },
+                documents: []
+            });
+        }
+
         // 1. Fetch Appointments (Timeline)
         const appointmentsRes = await client.query(
             'SELECT * FROM appointments WHERE patient_id = $1 ORDER BY date DESC, time DESC',

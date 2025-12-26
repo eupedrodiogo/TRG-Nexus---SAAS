@@ -37,6 +37,7 @@ import {
   BarChart,
   Bar
 } from 'recharts';
+import AddPatientModal from './AddPatientModal';
 
 interface DashboardProps {
   isDarkMode?: boolean;
@@ -48,6 +49,7 @@ interface DashboardProps {
 
 const Dashboard: React.FC<DashboardProps> = ({ isDarkMode = false, onOpenNotifications, privacyMode = false, therapist }) => {
   const [showAiInsights, setShowAiInsights] = useState(true);
+  const [isAddPatientModalOpen, setIsAddPatientModalOpen] = useState(false);
   const [stats, setStats] = useState({
     patients: 0,
     sessionsToday: 0,
@@ -146,7 +148,10 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode = false, onOpenNotific
 
         {/* Quick Actions Bar */}
         <div className="flex items-center gap-3 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0 no-scrollbar w-full lg:w-auto">
-          <button className="flex items-center gap-2 px-4 py-2 bg-primary-600 dark:bg-secondary-600 text-white rounded-xl shadow-lg shadow-primary-500/20 dark:shadow-secondary-600/20 hover:bg-primary-700 dark:hover:bg-secondary-700 transition-all active:scale-95 whitespace-nowrap">
+          <button
+            onClick={() => setIsAddPatientModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-primary-600 dark:bg-secondary-600 text-white rounded-xl shadow-lg shadow-primary-500/20 dark:shadow-secondary-600/20 hover:bg-primary-700 dark:hover:bg-secondary-700 transition-all active:scale-95 whitespace-nowrap"
+          >
             <Plus size={18} />
             <span className="font-bold text-sm">Novo Paciente</span>
           </button>
@@ -252,6 +257,13 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode = false, onOpenNotific
           )}
         </div>
       </div>
+
+      <AddPatientModal
+        isOpen={isAddPatientModalOpen}
+        onClose={() => setIsAddPatientModalOpen(false)}
+        therapistId={therapist?.id}
+        onSuccess={() => window.location.reload()}
+      />
     </div>
   );
 };

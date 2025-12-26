@@ -1,8 +1,10 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import nodemailer from 'nodemailer';
+import { createClient } from '@supabase/supabase-js';
 
 // Helper function inlined to avoid import issues
-const getEmailTemplate = (plan: string, name: string) => {
+const getEmailTemplate = (plan: string, name: string, magicLink?: string) => {
+    // ... colors ...
     const primaryColor = '#0f172a';
     const accentColor = '#3b82f6';
     const footerColor = '#64748b';
@@ -42,7 +44,8 @@ const getEmailTemplate = (plan: string, name: string) => {
     `;
 
     let title, subject, content;
-    const loginUrl = process.env.VITE_APP_URL ? `${process.env.VITE_APP_URL}/login` : 'https://trg-nexus.vercel.app/login';
+    // Use the provided magicLink if available, otherwise fallback to the standard login URL
+    const loginUrl = magicLink || (process.env.VITE_APP_URL ? `${process.env.VITE_APP_URL}/login` : 'https://trg-nexus.vercel.app/login');
 
     switch (plan) {
         case 'price_1ScuH5KPo7EypB7VQ7epTjiW': // Estágio
@@ -155,11 +158,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             },
         });
 
-        const isTrial = plan === 'trial';
-        // Subject logic now handled in templates.ts
+        const supabaseAdmin = createClient(
+            process.env.VITE_SUPABASE_URL || 'https://qyrsr5sa9s.supabase.co',
+            process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+        );
 
-        // ... (Template content simplified for brevity, but could be full html)
-        const { subject, html } = getEmailTemplate(plan, name);
+        let magicLink: string | undefined;
+
+        try {
+            const { data, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+                type: 'magiclink',
+                email: email,
+                options: {
+                    redirectTo: process.env.VITE_APP_URL ? `${process.env.VITE_APP_URL}/dashboard` : 'https://trg-nexus.vercel.app/dashboard'
+                }
+            });
+
+            if (!linkError && data && data.properties && data.properties.action_link) {
+                console.log('Magic link generated successfully');
+                magicLink = data.properties.action_link;
+            } else {
+                console.error('Failed to generate magic link:', linkError);
+            }
+        } catch (genError) {
+            console.error('Error generating magic link (fallback to login url):', genError);
+        }
+
+        const { subject, html } = getEmailTemplate(plan, name, magicLink);
 
         await transporter.sendMail({
             from: `"TRG Nexus" <${process.env.SMTP_USER}>`,

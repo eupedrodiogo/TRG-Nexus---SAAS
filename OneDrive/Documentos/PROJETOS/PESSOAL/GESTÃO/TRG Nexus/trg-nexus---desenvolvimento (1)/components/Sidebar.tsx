@@ -15,7 +15,8 @@ import {
   Sun,
   Megaphone,
   Eye,
-  EyeOff
+  EyeOff,
+  BarChart2
 } from 'lucide-react';
 import { AppView, NavItem } from '../types';
 
@@ -35,6 +36,10 @@ interface SidebarProps {
   onLogout?: () => void;
 }
 
+import { useAuth } from '../contexts/AuthContext';
+
+// ... imports remain the same
+
 const Sidebar: React.FC<SidebarProps> = ({
   isMobileOpen,
   toggleMobile,
@@ -48,6 +53,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   togglePrivacy,
   onLogout
 }) => {
+  const { user } = useAuth();
+
   const navItems: NavItem[] = [
     { id: AppView.DASHBOARD, label: 'Painel Geral', icon: LayoutDashboard },
     { id: AppView.AGENDA, label: 'Agenda', icon: Calendar },
@@ -55,21 +62,13 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: AppView.THERAPY, label: 'Sessão TRG', icon: BrainCircuit },
     { id: AppView.FINANCIAL, label: 'Financeiro', icon: Wallet },
     { id: AppView.MARKETING, label: 'Marketing & CRM', icon: Megaphone },
+    { id: AppView.REPORTS, label: 'Relatórios', icon: BarChart2 },
     { id: AppView.SETTINGS, label: 'Configurações', icon: Settings },
   ];
 
   // Determine width classes based on state
   const desktopWidthClass = isDesktopCollapsed ? 'md:w-20' : 'md:w-72';
   const mobileTransformClass = isMobileOpen ? 'translate-x-0' : '-translate-x-full';
-
-  const [user, setUser] = React.useState<{ name: string; email: string } | null>(null);
-
-  React.useEffect(() => {
-    const stored = localStorage.getItem('therapist');
-    if (stored) {
-      setUser(JSON.parse(stored));
-    }
-  }, []);
 
   const getInitials = (name: string) => {
     return name
@@ -79,6 +78,9 @@ const Sidebar: React.FC<SidebarProps> = ({
       .join('')
       .toUpperCase();
   };
+
+  const userName = user?.user_metadata?.name || 'Terapeuta';
+  const userEmail = user?.email || 'email@exemplo.com';
 
   return (
     <>
@@ -159,10 +161,6 @@ const Sidebar: React.FC<SidebarProps> = ({
         {/* Footer / User Profile & Theme Toggle */}
         <div className="p-4 border-t border-slate-800 dark:border-slate-900 shrink-0 space-y-4">
 
-
-
-          // ... (inside component)
-
           {/* Theme & Privacy Toggle */}
           <div className={`flex items-center ${isDesktopCollapsed ? 'flex-col gap-2' : 'justify-between'} bg-slate-800 dark:bg-slate-900 rounded-lg p-1`}>
             {!isDesktopCollapsed && <span className="text-xs text-slate-400 font-medium px-2">Opções</span>}
@@ -190,11 +188,11 @@ const Sidebar: React.FC<SidebarProps> = ({
           {/* User Profile */}
           <div className={`flex items-center gap-3 ${isDesktopCollapsed ? 'md:justify-center' : ''}`}>
             <div className="w-10 h-10 shrink-0 rounded-full bg-slate-700 dark:bg-slate-800 flex items-center justify-center text-sm font-bold text-slate-300 border border-slate-600 dark:border-slate-700">
-              {user ? getInitials(user.name) : 'DR'}
+              {getInitials(userName)}
             </div>
 
             <div className={`flex flex-col min-w-0 transition-opacity duration-200 ${isDesktopCollapsed ? 'md:hidden' : 'flex'}`}>
-              <span className="text-sm font-medium text-white truncate">{user ? user.name : 'Terapeuta'}</span>
+              <span className="text-sm font-medium text-white truncate">{userName}</span>
               <span className="text-xs text-slate-400 truncate">Terapeuta TRG</span>
             </div>
 

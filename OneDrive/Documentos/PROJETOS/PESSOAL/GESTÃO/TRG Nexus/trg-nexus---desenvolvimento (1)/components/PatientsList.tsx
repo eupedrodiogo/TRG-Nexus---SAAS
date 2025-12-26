@@ -34,9 +34,13 @@ import {
   FileImage,
   Film
 } from 'lucide-react';
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+} from 'recharts';
 import { Patient } from '../types';
 import { MOCK_PATIENTS } from '../constants';
 import RecordingGallery from './Shared/RecordingGallery';
+import AddSUDModal from './AddSUDModal';
 
 interface PatientsListProps {
   highlightPatientId?: string | null;
@@ -86,16 +90,63 @@ const ClientsList: React.FC<PatientsListProps> = ({ highlightPatientId, onNaviga
   const [clientDetails, setClientDetails] = useState<any>({ timeline: [], financial: { totalInvested: 0, pending: 0, history: [] }, documents: [] });
   const [loadingDetails, setLoadingDetails] = useState(false);
 
+  // SUD State
+  const [sudHistory, setSudHistory] = useState<any[]>([]);
+  const [isSUDModalOpen, setIsSUDModalOpen] = useState(false);
+  const [addingSUD, setAddingSUD] = useState(false);
+
   useEffect(() => {
     if (viewingClient) {
       setLoadingDetails(true);
+
+      // Fetch Client Details
       fetch(`/api/patient-details?patientId=${viewingClient.id}`)
         .then(res => res.json())
         .then(data => setClientDetails(data))
-        .catch(err => console.error("Error loading details:", err))
+        .catch(err => console.error("Error loading details:", err));
+
+      // Fetch SUD History
+      fetch(`/api/sud?patientId=${viewingClient.id}`)
+        .then(res => res.json())
+        .then(data => setSudHistory(data))
+        .catch(err => console.error("Error loading SUD history:", err))
         .finally(() => setLoadingDetails(false));
     }
   }, [viewingClient]);
+
+  const handleSaveSUD = async (score: number, notes: string) => {
+    if (!viewingClient) return;
+    setAddingSUD(true);
+    try {
+      const therapistStr = localStorage.getItem('therapist');
+      const therapist = therapistStr ? JSON.parse(therapistStr) : null;
+
+      const response = await fetch('/api/sud', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          therapistId: therapist?.id,
+          patientId: viewingClient.id,
+          score,
+          notes
+        })
+      });
+
+      if (response.ok) {
+        // Refresh SUD history
+        const newRecord = await response.json();
+        setSudHistory(prev => [...prev, newRecord].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
+        setIsSUDModalOpen(false);
+      } else {
+        alert('Erro ao salvar SUD');
+      }
+    } catch (error) {
+      console.error("Error saving SUD:", error);
+      alert('Erro ao salvar SUD');
+    } finally {
+      setAddingSUD(false);
+    }
+  };
 
   // Edit Modal State
   const [editingClient, setEditingClient] = useState<Patient | null>(null);
@@ -699,36 +750,107 @@ const ClientsList: React.FC<PatientsListProps> = ({ highlightPatientId, onNaviga
               )}
 
               {activeTab === 'history' && (
-                <div className="space-y-6 animate-fade-in relative">
-                  {/* Vertical Line */}
-                  <div className="absolute left-[19px] top-2 bottom-0 w-px bg-slate-200 dark:bg-slate-800"></div>
-
-                  {loadingDetails ? <p className="p-4 text-slate-500">Carregando histórico...</p> : clientDetails.timeline.length === 0 ? <p className="p-4 text-slate-500">Nenhum histórico encontrado.</p> : clientDetails.timeline.map((event: any) => (
-                    <div
-                      key={event.id}
-                      className={`flex gap-4 relative ${event.type === 'session' ? 'cursor-pointer group' : ''}`}
-                      onClick={() => event.type === 'session' ? setViewingSession(event) : null}
-                    >
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 border-4 border-white dark:border-slate-900 z-10 transition-transform ${event.type === 'session' ? 'group-hover:scale-110' : ''} ${event.type === 'session' ? 'bg-primary-100 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400' :
-                        event.type === 'financial' ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' :
-                          'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
-                        }`}>
-                        {event.type === 'session' ? <Briefcase size={16} /> : event.type === 'financial' ? <DollarSign size={16} /> : <MessageCircle size={16} />}
-                      </div>
-                      <div className="pt-1 pb-6">
-                        <span className="text-xs font-bold text-slate-400">{new Date(event.date).toLocaleDateString('pt-BR')}</span>
-                        <h4 className={`font-bold text-slate-800 dark:text-white mt-0.5 ${event.type === 'session' ? 'group-hover:text-primary-600 dark:group-hover:text-secondary-400 transition-colors' : ''}`}>
-                          {event.title}
-                        </h4>
-                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">{event.desc}</p>
-                        {event.type === 'session' && (
-                          <span className="inline-flex items-center gap-1 mt-2 text-xs font-bold text-primary-600 dark:text-secondary-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                            Ver Detalhes <ChevronRight size={12} />
-                          </span>
-                        )}
-                      </div>
+                <div className="space-y-6 animate-fade-in">
+                  {/* SUD Chart Section */}
+                  <div className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm relative z-20">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                        <Activity size={16} className="text-indigo-500" />
+                        Monitoramento de SUD (Nível de Desconforto)
+                      </h3>
+                      <button
+                        onClick={() => setIsSUDModalOpen(true)}
+                        className="text-xs bg-indigo-50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 font-bold px-3 py-1.5 rounded-lg transition-colors border border-indigo-200 dark:border-indigo-800"
+                      >
+                        + Novo Registro
+                      </button>
                     </div>
-                  ))}
+
+                    {sudHistory.length > 0 ? (
+                      <div className="h-[200px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={sudHistory}>
+                            <defs>
+                              <linearGradient id="colorSud" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                                <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" opacity={0.3} />
+                            <XAxis
+                              dataKey="date"
+                              tickFormatter={(date) => new Date(date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                              axisLine={false}
+                              tickLine={false}
+                              tick={{ fontSize: 10, fill: '#94a3b8' }}
+                              dy={10}
+                            />
+                            <YAxis
+                              domain={[0, 10]}
+                              axisLine={false}
+                              tickLine={false}
+                              tick={{ fontSize: 10, fill: '#94a3b8' }}
+                            />
+                            <Tooltip
+                              contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', backgroundColor: '#1e293b', color: '#fff' }}
+                              labelFormatter={(date) => new Date(date).toLocaleDateString('pt-BR')}
+                            />
+                            <Area
+                              type="monotone"
+                              dataKey="score"
+                              stroke="#6366f1"
+                              strokeWidth={3}
+                              fillOpacity={1}
+                              fill="url(#colorSud)"
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    ) : (
+                      <div className="h-[150px] flex flex-col items-center justify-center text-slate-400 border border-dashed border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50 dark:bg-slate-900/50">
+                        <Activity size={32} className="mb-2 opacity-20" />
+                        <p className="text-sm">Sem registros de SUD ainda.</p>
+                        <button
+                          onClick={() => setIsSUDModalOpen(true)}
+                          className="mt-2 text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-bold"
+                        >
+                          Registrar primeiro ponto
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="relative space-y-6">
+                    {/* Vertical Line */}
+                    <div className="absolute left-[19px] top-2 bottom-0 w-px bg-slate-200 dark:bg-slate-800"></div>
+
+                    {loadingDetails ? <p className="p-4 text-slate-500">Carregando histórico...</p> : clientDetails.timeline.length === 0 ? <p className="p-4 text-slate-500">Nenhum histórico encontrado.</p> : clientDetails.timeline.map((event: any) => (
+                      <div
+                        key={event.id}
+                        className={`flex gap-4 relative ${event.type === 'session' ? 'cursor-pointer group' : ''}`}
+                        onClick={() => event.type === 'session' ? setViewingSession(event) : null}
+                      >
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 border-4 border-white dark:border-slate-900 z-10 transition-transform ${event.type === 'session' ? 'group-hover:scale-110' : ''} ${event.type === 'session' ? 'bg-primary-100 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400' :
+                          event.type === 'financial' ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' :
+                            'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                          }`}>
+                          {event.type === 'session' ? <Briefcase size={16} /> : event.type === 'financial' ? <DollarSign size={16} /> : <MessageCircle size={16} />}
+                        </div>
+                        <div className="pt-1 pb-6">
+                          <span className="text-xs font-bold text-slate-400">{new Date(event.date).toLocaleDateString('pt-BR')}</span>
+                          <h4 className={`font-bold text-slate-800 dark:text-white mt-0.5 ${event.type === 'session' ? 'group-hover:text-primary-600 dark:group-hover:text-secondary-400 transition-colors' : ''}`}>
+                            {event.title}
+                          </h4>
+                          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">{event.desc}</p>
+                          {event.type === 'session' && (
+                            <span className="inline-flex items-center gap-1 mt-2 text-xs font-bold text-primary-600 dark:text-secondary-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                              Ver Detalhes <ChevronRight size={12} />
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -987,6 +1109,13 @@ const ClientsList: React.FC<PatientsListProps> = ({ highlightPatientId, onNaviga
           </div>
         </div>
       )}
+
+      <AddSUDModal
+        isOpen={isSUDModalOpen}
+        onClose={() => setIsSUDModalOpen(false)}
+        onSave={handleSaveSUD}
+        loading={addingSUD}
+      />
 
     </div>
   );

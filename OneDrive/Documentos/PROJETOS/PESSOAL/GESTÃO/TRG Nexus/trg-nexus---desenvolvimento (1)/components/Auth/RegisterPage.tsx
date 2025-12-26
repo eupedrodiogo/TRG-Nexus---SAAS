@@ -6,11 +6,13 @@ const RegisterPage: React.FC = () => {
     const [formData, setFormData] = useState({
         name: '',
         email: '',
-        phone: ''
+        phone: '',
+        password: ''
     });
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -19,44 +21,53 @@ const RegisterPage: React.FC = () => {
 
         try {
             const plan = new URLSearchParams(window.location.search).get('plan') || 'trial';
-            const redirectUrl = `${window.location.origin}/dashboard`;
 
             // Basic validation
             if (!formData.phone || formData.phone.length < 10) {
                 throw new Error('Por favor, insira um número de WhatsApp válido.');
             }
+            if (!formData.password || formData.password.length < 6) {
+                throw new Error('Sua senha deve ter pelo menos 6 caracteres.');
+            }
 
-            console.log('Initiating Magic Link for:', formData.email);
+            console.log('Initiating Registration for:', formData.email);
 
-            // 1. Sign In with OTP
-            const { error: authError } = await supabase.auth.signInWithOtp({
-                email: formData.email,
-                options: {
-                    emailRedirectTo: redirectUrl,
-                    data: {
-                        name: formData.name,
-                        phone: formData.phone, // Save phone in metadata
-                        plan: plan
-                    }
-                }
+            // Call unified backend API
+            const response = await fetch('/api/auth/register-complete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: formData.email,
+                    name: formData.name,
+                    phone: formData.phone,
+                    password: formData.password,
+                    plan: plan
+                })
             });
 
-            if (authError) throw authError;
+            const result = await response.json();
 
-            // 2. Send Notifications (Async - don't block success state)
-            // A. Email
-            fetch('/api/emails/welcome', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: formData.email, name: formData.name, plan: plan })
-            }).catch(console.error);
+            if (!response.ok) {
+                throw new Error(result.error || 'Erro ao realizar cadastro.');
+            }
 
-            // B. WhatsApp
-            fetch('/api/notifications/register-welcome', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: formData.name, phone: formData.phone })
-            }).catch(console.error);
+            // Auto-login attempt
+            try {
+                const { error: loginError } = await supabase.auth.signInWithPassword({
+                    email: formData.email,
+                    password: formData.password
+                });
+
+                if (!loginError) {
+                    // Redirect will be handled by AuthContext/App state or we can force it
+                    window.location.href = '/dashboard';
+                    return;
+                }
+                console.warn('Auto-login failed after registration:', loginError);
+                // Fallback to success screen if auto-login fails
+            } catch (autoLoginErr) {
+                console.warn('Auto-login exception:', autoLoginErr);
+            }
 
             setSuccess(true);
 
@@ -76,38 +87,18 @@ const RegisterPage: React.FC = () => {
                         <Mail className="w-10 h-10 text-green-600 dark:text-green-400" />
                     </div>
                     <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-4">
-                        Tudo certo! Verifique seu email
+                        Conta criada com sucesso!
                     </h2>
                     <p className="text-slate-600 dark:text-slate-400 mb-8 text-lg leading-relaxed">
-                        Enviamos um Link Mágico para <strong>{formData.email}</strong>.<br />
-                        Também enviamos uma confirmação no seu <strong>WhatsApp</strong> 📲.
+                        Sua conta foi ativada.<br />
+                        Tente fazer login com suas credenciais.
                     </p>
 
                     <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-xl mb-8 border border-blue-100 dark:border-blue-800">
-                        <p className="text-blue-900 dark:text-blue-100 font-medium mb-4">
-                            Abra seu email e clique no botão:
-                        </p>
-                        <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-dashed border-blue-200 dark:border-blue-700 font-bold text-primary-600 dark:text-primary-400 mb-4">
-                            "Acessar Painel VIP"
-                        </div>
-                        <p className="text-xs text-blue-700 dark:text-blue-300">
-                            Isso validará sua conta automaticamente, sem senhas!
-                        </p>
+                        <a href="/login?registered=true" className="bg-primary-600 text-white p-3 rounded-lg font-bold block hover:bg-primary-700 transition">
+                            Ir para Login
+                        </a>
                     </div>
-
-                    <a
-                        href={`mailto:${formData.email}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center justify-center gap-2 w-full py-3.5 px-6 border border-transparent shadow-lg text-sm font-bold rounded-xl text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-all active:scale-95 mb-4"
-                    >
-                        <Mail size={18} />
-                        Abrir meu Email agora
-                    </a>
-
-                    <a href="/login" className="text-sm text-slate-500 hover:text-primary-600 transition-colors">
-                        Voltar para Login
-                    </a>
                 </div>
             </div>
         );
@@ -128,7 +119,7 @@ const RegisterPage: React.FC = () => {
                     Crie sua conta de Terapeuta
                 </h2>
                 <p className="mt-2 text-center text-sm text-slate-600 dark:text-slate-400">
-                    Acesso seguro e simplificado via email.
+                    Acesso completo e seguro para sua gestão.
                 </p>
             </div>
 
@@ -187,6 +178,31 @@ const RegisterPage: React.FC = () => {
                             </div>
                         </div>
 
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Crie sua Senha</label>
+                            <div className="mt-1 relative">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <div className="h-5 w-5 text-slate-400 flex items-center justify-center text-xs">🔒</div>
+                                </div>
+                                <input
+                                    type={showPassword ? "text" : "password"}
+                                    required
+                                    minLength={6}
+                                    value={formData.password}
+                                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                                    className="appearance-none block w-full pl-10 px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg placeholder-slate-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 dark:bg-slate-800 dark:text-white transition-colors"
+                                    placeholder="Mínimo 6 caracteres"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-sm text-slate-400 hover:text-slate-600"
+                                >
+                                    {showPassword ? "Ocultar" : "Mostrar"}
+                                </button>
+                            </div>
+                        </div>
+
                         {error && (
                             <div className="rounded-md bg-red-50 dark:bg-red-900/30 p-4">
                                 <div className="flex">
@@ -212,7 +228,7 @@ const RegisterPage: React.FC = () => {
                                     <Loader2 className="animate-spin h-5 w-5 text-white" />
                                 ) : (
                                     <span className="flex items-center gap-2">
-                                        Receber Link de Acesso
+                                        Criar Conta e Acessar
                                         <ArrowRight size={18} className="text-primary-100 group-hover:translate-x-1 transition-transform" />
                                     </span>
                                 )}

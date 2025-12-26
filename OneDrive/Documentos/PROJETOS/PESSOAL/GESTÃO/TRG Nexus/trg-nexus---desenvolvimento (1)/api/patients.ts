@@ -66,7 +66,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
     } catch (error: any) {
         console.error('Patients API Error:', error);
-        res.status(500).json({ error: error.message });
+        // Log more details for debugging
+        console.error('Query:', req.query);
+        console.error('Connection String Present:', !!connectionString);
+        res.status(500).json({
+            error: error.message,
+            details: error.toString(),
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
     } finally {
         client.release();
         await pool.end();
