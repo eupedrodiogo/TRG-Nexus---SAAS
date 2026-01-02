@@ -46,11 +46,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         else if (action === 'intent') {
-            const { amount, currency } = req.body;
+            const { amount, currency, metadata } = req.body;
 
             const paymentIntent = await stripe.paymentIntents.create({
                 amount,
                 currency,
+                metadata,
             });
 
             return res.status(200).json({ clientSecret: paymentIntent.client_secret });

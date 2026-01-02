@@ -8,6 +8,7 @@ const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 
 interface PaymentStepProps {
     data: any;
+    appointmentId: string | null;
     onBack: () => void;
     onComplete: () => void;
 }
@@ -93,7 +94,7 @@ const CheckoutForm = ({ onBack, onComplete, amount }: { onBack: () => void, onCo
     );
 };
 
-const PaymentStep: React.FC<PaymentStepProps> = ({ data, onBack, onComplete }) => {
+const PaymentStep: React.FC<PaymentStepProps> = ({ data, appointmentId, onBack, onComplete }) => {
     const [clientSecret, setClientSecret] = useState('');
     const [isLoadingSecret, setIsLoadingSecret] = useState(true);
     const SESSION_PRICE = 100; // R$ 1,00 (Promotional)
@@ -104,7 +105,11 @@ const PaymentStep: React.FC<PaymentStepProps> = ({ data, onBack, onComplete }) =
         fetch('/api/payments?action=intent', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ amount: SESSION_PRICE, currency: 'brl' })
+            body: JSON.stringify({
+                amount: SESSION_PRICE,
+                currency: 'brl',
+                metadata: { appointmentId }
+            })
         })
             .then((res) => res.json())
             .then((data) => {
@@ -115,7 +120,7 @@ const PaymentStep: React.FC<PaymentStepProps> = ({ data, onBack, onComplete }) =
                 console.error('Error creating payment intent:', err);
                 setIsLoadingSecret(false);
             });
-    }, []);
+    }, [appointmentId]);
 
     return (
         <div className="max-w-md mx-auto animate-fade-in">

@@ -14,14 +14,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const { name, email, phone, date, time, therapistId, ...anamnesisData } = req.body || {};
+    const { name, email, phone, date, time, therapistId, status = 'scheduled', ...anamnesisData } = req.body || {};
 
     if (!name || !email || !date || !time) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
 
     try {
-        console.log(`[Booking] Processing for ${email} with ${therapistId || 'System'}`);
+        console.log(`[Booking] Processing for ${email} with ${therapistId || 'System'} (Status: ${status})`);
 
         // 1. Fetch Therapist
         let therapistName = 'Terapeuta TRG';
@@ -47,14 +47,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // 3. Create Appointment
-        const { error: aError } = await supabase.from('appointments').insert({
-            patient_id: patientId, therapist_id: therapistId, date, time,
-            status: 'scheduled', type: 'Primeira Consulta',
+        status: status, type: 'Primeira Consulta',
             notes: JSON.stringify(anamnesisData)
-        });
-        if (aError) throw aError;
+    }).select('id');
+    const { data: rows, error: aError } = await appointmentQuery;
+    if (aError) throw aError;
 
-        // 4. Notifications
+    // 4. Notifications (Only if Confirmed)
+    if (status === 'scheduled') {
         console.log('[Booking] Starting notifications...');
 
         const { data: therapistData } = await supabase
@@ -86,11 +86,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         console.log('[Booking] Notifications processed.');
-
-        return res.status(200).json({ message: 'Booking confirmed', patientId });
-
-    } catch (error: any) {
-        console.error('[Booking] Fatal Error:', error);
-        return res.status(500).json({ error: error.message });
+    } else {
+        console.log(`[Booking] Status is ${status}, skipping notifications.`);
     }
+
+    return res.status(200).json({ message: 'Booking processed', patientId, appointmentId: rows && rows[0] ? rows[0].id : undefined });
+
+} catch (error: any) {
+    console.error('[Booking] Fatal Error:', error);
+    return res.status(500).json({ error: error.message });
+}
 }

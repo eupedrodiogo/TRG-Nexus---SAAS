@@ -74,43 +74,32 @@ const BookingWizard: React.FC = () => {
     }
 
     const [patientId, setPatientId] = useState<string | null>(null);
+    const [appointmentId, setAppointmentId] = useState<string | null>(null);
 
-    const handleCompletion = async () => {
-        setIsLoading(true);
+    const createPendingBooking = async () => {
+        if (appointmentId) return; // Already created
+
         try {
             const response = await fetch('/api/booking', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(formData)
+                body: JSON.stringify({ ...formData, status: 'pending_payment' })
             });
-
-            let data;
-            const contentType = response.headers.get("content-type");
-            if (contentType && contentType.indexOf("application/json") !== -1) {
-                data = await response.json();
-            } else {
-                const text = await response.text();
-                throw new Error(`Server error: ${response.status} ${text.substring(0, 100)}...`);
-            }
-
+            const data = await response.json();
             if (response.ok) {
                 setPatientId(data.patientId);
-
-                if (data.emailDebug && data.emailDebug.status !== 'sent') {
-                    console.warn('Email warning:', data.emailDebug);
-                }
-
-                localStorage.removeItem('booking_draft'); // Clear draft on success
-                setIsCompleted(true);
-            } else {
-                alert(`Erro ao realizar agendamento: ${data.error || 'Tente novamente.'}`);
+                setAppointmentId(data.appointmentId);
             }
-        } catch (error: any) {
-            console.error('Booking error:', error);
-            alert(`Erro de conexão: ${error.message}`);
-        } finally {
-            setIsLoading(false);
+        } catch (e) {
+            console.error('Failed to create pending booking', e);
         }
+    };
+
+    const handleCompletion = async () => {
+        // Payment is already done via Stripe Component
+        // We just need to clear storage and show success
+        localStorage.removeItem('booking_draft');
+        setIsCompleted(true);
     };
 
     // Auto-redirect effect
@@ -173,6 +162,13 @@ const BookingWizard: React.FC = () => {
     // Determine actual step counts for display (adjust if skipping step 1)
     const stepsToDisplay = skipTherapistSelection ? [2, 3, 4, 5] : [1, 2, 3, 4, 5];
     // Map step view logic
+    const handleAnamnesisNext = async () => {
+        setIsLoading(true);
+        await createPendingBooking();
+        setIsLoading(false);
+        nextStep();
+    };
+
     const renderStep = () => {
         switch (currentStep) {
             case 1:
@@ -182,9 +178,9 @@ const BookingWizard: React.FC = () => {
             case 3:
                 return <RegisterStep data={formData} onUpdate={updateData} onNext={nextStep} />;
             case 4:
-                return <AnamnesisStep data={formData} onUpdate={updateData} onNext={nextStep} onBack={prevStep} />;
+                return <AnamnesisStep data={formData} onUpdate={updateData} onNext={handleAnamnesisNext} onBack={prevStep} />;
             case 5:
-                return <PaymentStep data={formData} onBack={prevStep} onComplete={handleCompletion} />;
+                return <PaymentStep data={formData} appointmentId={appointmentId} onBack={prevStep} onComplete={handleCompletion} />;
             default:
                 return <div>Erro: Passo desconhecido</div>;
         }
