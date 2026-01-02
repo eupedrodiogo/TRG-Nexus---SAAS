@@ -4,8 +4,15 @@ import RegisterStep from './steps/RegisterStep';
 import AnamnesisStep from './steps/AnamnesisStep';
 import ScheduleStep from './steps/ScheduleStep';
 import PaymentStep from './steps/PaymentStep';
+import TherapistSelectionStep from './steps/TherapistSelectionStep';
+import { AddToCalendar } from '../AddToCalendar';
 
 const BookingWizard: React.FC = () => {
+    // Step 1: Therapist Selection (skipped if therapistId in URL)
+    // Step 2: Schedule
+    // Step 3: Register
+    // Step 4: Anamnesis
+    // Step 5: Payment
     const [currentStep, setCurrentStep] = useState(1);
     const [formData, setFormData] = useState({
         name: '',
@@ -21,12 +28,17 @@ const BookingWizard: React.FC = () => {
     const [isCompleted, setIsCompleted] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
 
+    // Track if we should skip the first step (Therapist Selection)
+    const [skipTherapistSelection, setSkipTherapistSelection] = useState(false);
+
     useEffect(() => {
         // Extract therapistId from URL: /agendar/123
         const pathParts = window.location.pathname.split('/');
         // pathParts[0] = "", pathParts[1] = "agendar", pathParts[2] = "123" (optional)
         if (pathParts.length > 2 && pathParts[2]) {
             setFormData(prev => ({ ...prev, therapistId: pathParts[2] }));
+            setSkipTherapistSelection(true);
+            setCurrentStep(2); // Jump straight to Schedule
         }
     }, []);
 
@@ -36,6 +48,11 @@ const BookingWizard: React.FC = () => {
 
     const nextStep = () => setCurrentStep(prev => prev + 1);
     const prevStep = () => setCurrentStep(prev => prev - 1);
+
+    const handleTherapistSelect = (therapistId: string) => {
+        setFormData(prev => ({ ...prev, therapistId }));
+        nextStep();
+    }
 
     const [patientId, setPatientId] = useState<string | null>(null);
 
@@ -60,15 +77,9 @@ const BookingWizard: React.FC = () => {
             if (response.ok) {
                 setPatientId(data.patientId);
 
-                // Check email status
+                // Allow a moment for state to update before showing completion
                 if (data.emailDebug && data.emailDebug.status !== 'sent') {
                     console.warn('Email warning:', data.emailDebug);
-                    // Don't alarm the user too much, just let them know
-                    if (data.emailDebug.status === 'skipped_no_credentials') {
-                        console.log('Email skipped (dev mode or missing creds)');
-                    } else {
-                        alert(`Seu agendamento foi confirmado! ✅\n\nPorém, houve uma falha técnica ao enviar o e-mail de confirmação. Não se preocupe, seu horário está garantido.`);
-                    }
                 }
 
                 setIsCompleted(true);
@@ -88,7 +99,7 @@ const BookingWizard: React.FC = () => {
         if (isCompleted && patientId) {
             const timer = setTimeout(() => {
                 window.location.href = `/portal-paciente/autenticar/${patientId}`;
-            }, 3000);
+            }, 15000);
             return () => clearTimeout(timer);
         }
     }, [isCompleted, patientId]);
@@ -105,9 +116,19 @@ const BookingWizard: React.FC = () => {
                         Sua sessão foi agendada com sucesso.
                     </p>
 
+                    <div className="mb-4 flex flex-col items-center gap-4">
+                        <AddToCalendar
+                            title="Sessão TRG - TRG Nexus"
+                            date={formData.date}
+                            time={formData.time}
+                            description={`Sessão agendada via TRG Nexus.\nQueixa: ${formData.complaint}`}
+                            className="w-full"
+                        />
+                    </div>
+
                     <div className="mb-8 p-4 bg-primary-50 dark:bg-primary-900/20 rounded-xl border border-primary-100 dark:border-primary-900/30 flex flex-col items-center gap-2">
                         <div className="w-6 h-6 border-2 border-primary-200 border-t-primary-600 rounded-full animate-spin"></div>
-                        <p className="text-sm font-bold text-primary-700 dark:text-primary-300">Redirecionando para seu Portal...</p>
+                        <p className="text-sm font-bold text-primary-700 dark:text-primary-300">Sincronizando... Redirecionando em breve</p>
                     </div>
 
                     <a
@@ -130,6 +151,26 @@ const BookingWizard: React.FC = () => {
         );
     }
 
+    // Determine actual step counts for display (adjust if skipping step 1)
+    const stepsToDisplay = skipTherapistSelection ? [2, 3, 4, 5] : [1, 2, 3, 4, 5];
+    // Map step view logic
+    const renderStep = () => {
+        switch (currentStep) {
+            case 1:
+                return <TherapistSelectionStep onSelect={handleTherapistSelect} />;
+            case 2:
+                return <ScheduleStep data={formData} onUpdate={updateData} onNext={nextStep} onBack={skipTherapistSelection ? () => { } : prevStep} />;
+            case 3:
+                return <RegisterStep data={formData} onUpdate={updateData} onNext={nextStep} />;
+            case 4:
+                return <AnamnesisStep data={formData} onUpdate={updateData} onNext={nextStep} onBack={prevStep} />;
+            case 5:
+                return <PaymentStep data={formData} onBack={prevStep} onComplete={handleCompletion} />;
+            default:
+                return <div>Erro: Passo desconhecido</div>;
+        }
+    };
+
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col font-sans">
             {/* Header */}
@@ -145,7 +186,7 @@ const BookingWizard: React.FC = () => {
 
                 {/* Progress Steps */}
                 <div className="hidden md:flex items-center gap-4">
-                    {[1, 2, 3, 4].map(step => (
+                    {stepsToDisplay.map((step, index) => (
                         <div key={step} className="flex items-center gap-2">
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all
                 ${step === currentStep
@@ -155,9 +196,9 @@ const BookingWizard: React.FC = () => {
                                         : 'bg-slate-200 dark:bg-slate-800 text-slate-500'
                                 }
               `}>
-                                {step < currentStep ? <Check size={16} /> : step}
+                                {step < currentStep ? <Check size={16} /> : (skipTherapistSelection ? index + 1 : step)}
                             </div>
-                            {step < 4 && <div className={`w-12 h-1 rounded-full ${step < currentStep ? 'bg-green-500' : 'bg-slate-200 dark:bg-slate-800'}`}></div>}
+                            {index < stepsToDisplay.length - 1 && <div className={`w-12 h-1 rounded-full ${step < currentStep ? 'bg-green-500' : 'bg-slate-200 dark:bg-slate-800'}`}></div>}
                         </div>
                     ))}
                 </div>
@@ -172,17 +213,13 @@ const BookingWizard: React.FC = () => {
                             <p className="text-slate-500 font-medium">Processando agendamento...</p>
                         </div>
                     ) : (
-                        <>
-                            {currentStep === 1 && <RegisterStep data={formData} onUpdate={updateData} onNext={nextStep} />}
-                            {currentStep === 2 && <AnamnesisStep data={formData} onUpdate={updateData} onNext={nextStep} onBack={prevStep} />}
-                            {currentStep === 3 && <ScheduleStep data={formData} onUpdate={updateData} onNext={nextStep} onBack={prevStep} />}
-                            {currentStep === 4 && <PaymentStep data={formData} onBack={prevStep} onComplete={handleCompletion} />}
-                        </>
+                        renderStep()
                     )}
                 </div>
             </main>
         </div>
     );
 };
+
 
 export default BookingWizard;

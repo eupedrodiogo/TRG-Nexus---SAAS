@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrainCircuit, CheckCircle2, ArrowRight, Star, ShieldCheck, Clock, Heart, Users, Sun, Moon } from 'lucide-react';
+import { BrainCircuit, CheckCircle2, ArrowRight, Star, ShieldCheck, Clock, Heart, Users, Sun, Moon, PlayCircle, X } from 'lucide-react';
 
 interface PatientLandingPageProps {
     isDarkMode: boolean;
@@ -18,6 +18,9 @@ const PatientLandingPage: React.FC<PatientLandingPageProps> = ({ isDarkMode, tog
             window.location.href = '/agendar';
         }
     };
+
+    const [showVideoModal, setShowVideoModal] = React.useState(false);
+
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100">
@@ -87,16 +90,9 @@ const PatientLandingPage: React.FC<PatientLandingPageProps> = ({ isDarkMode, tog
             {/* What is TRG */}
             <section className="py-20 bg-white dark:bg-slate-900">
                 <div className="max-w-7xl mx-auto px-6">
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-                        <div className="relative">
-                            <div className="absolute -inset-4 bg-primary-100 dark:bg-primary-900/20 rounded-3xl transform -rotate-3" />
-                            <img
-                                src="https://images.unsplash.com/photo-1544027993-37dbfe43562a?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
-                                alt="Sessão de Terapia"
-                                className="relative rounded-2xl shadow-2xl w-full object-cover h-[500px]"
-                            />
-                        </div>
-                        <div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center mb-16">
+                        {/* Left Column: Text */}
+                        <div className="order-2 lg:order-1">
                             <h2 className="text-3xl lg:text-4xl font-bold mb-6 text-slate-800 dark:text-white">O que é a TRG?</h2>
                             <p className="text-lg text-slate-600 dark:text-slate-300 mb-6 leading-relaxed">
                                 A Terapia de Reprocessamento Generativo (TRG) é uma metodologia revolucionária que atua diretamente na raiz dos problemas emocionais. Diferente de terapias tradicionais que podem levar anos, a TRG foca em reestruturar o psiquismo de forma objetiva.
@@ -117,11 +113,38 @@ const PatientLandingPage: React.FC<PatientLandingPageProps> = ({ isDarkMode, tog
                                 ))}
                             </ul>
                             <button
-                                onClick={handleBooking}
-                                className="px-8 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold rounded-xl hover:opacity-90 transition-all"
+                                onClick={() => setShowVideoModal(true)}
+                                className="w-fit px-8 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold rounded-xl hover:opacity-90 transition-all flex items-center gap-2"
                             >
+                                <PlayCircle size={20} />
                                 Conhecer a Metodologia
                             </button>
+                        </div>
+
+                        {/* Right Column: Image */}
+                        <div className="relative order-1 lg:order-2">
+                            <div className="absolute -inset-4 bg-primary-100 dark:bg-primary-900/20 rounded-3xl transform rotate-3" />
+                            <img
+                                src="https://images.unsplash.com/photo-1544027993-37dbfe43562a?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
+                                alt="Sessão de Terapia"
+                                className="relative rounded-2xl shadow-2xl w-full object-cover h-[500px]"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Bottom Row: Video */}
+                    <div className="w-full max-w-5xl mx-auto">
+                        <div className="rounded-2xl overflow-hidden shadow-2xl ring-1 ring-slate-900/10 dark:ring-white/10 w-full">
+                            <div className="relative pb-[56.25%] h-0 bg-black">
+                                <iframe
+                                    className="absolute top-0 left-0 w-full h-full"
+                                    src="https://www.youtube.com/embed/11pswl7LyZ4?si=LVVdX6OGO0UV10GU&controls=0"
+                                    title="TRG Methodology"
+                                    frameBorder="0"
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                    allowFullScreen
+                                ></iframe>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -193,6 +216,30 @@ const PatientLandingPage: React.FC<PatientLandingPageProps> = ({ isDarkMode, tog
                     </div>
                 </div>
             </footer>
+
+            {/* Video Modal */}
+            {showVideoModal && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in" onClick={() => setShowVideoModal(false)}>
+                    <div className="relative w-full max-w-5xl bg-black rounded-2xl overflow-hidden shadow-2xl animate-scale-up" onClick={e => e.stopPropagation()}>
+                        <button
+                            onClick={() => setShowVideoModal(false)}
+                            className="absolute top-4 right-4 z-10 p-2 bg-black/50 text-white rounded-full hover:bg-black/70 transition-all"
+                        >
+                            <X size={24} />
+                        </button>
+                        <div className="relative pb-[56.25%] h-0">
+                            <iframe
+                                className="absolute top-0 left-0 w-full h-full"
+                                src="https://www.youtube.com/embed/11pswl7LyZ4?si=LVVdX6OGO0UV10GU&autoplay=1"
+                                title="TRG Methodology Fullscreen"
+                                frameBorder="0"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                allowFullScreen
+                            ></iframe>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

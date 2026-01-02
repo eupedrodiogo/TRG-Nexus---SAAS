@@ -51,13 +51,11 @@ interface Patient {
 export function ReportsView() {
    const { user } = useAuth();
    const { isDarkMode } = useTheme();
-   // Default to dark mode handling via Tailwind 'dark:' classes if system supports it,
-   // but here we just use standard utility classes that look good in both or prioritize one.
-   // Assuming the app has a dark/light toggle class on root.
 
    const [patients, setPatients] = useState<Patient[]>([]);
    const [selectedPatient, setSelectedPatient] = useState('');
    const [reportType, setReportType] = useState('evolution');
+   const [clinicalNotes, setClinicalNotes] = useState('');
    const [loading, setLoading] = useState(false);
    const [generating, setGenerating] = useState(false);
    const [currentReport, setCurrentReport] = useState('');
@@ -65,6 +63,7 @@ export function ReportsView() {
    const [loadingHistory, setLoadingHistory] = useState(false);
    const [sudData, setSudData] = useState<number[]>([]);
    const [sudLabels, setSudLabels] = useState<string[]>([]);
+   const [patientMetadata, setPatientMetadata] = useState({ phase: 'N/A', symptoms: 'N/A' });
 
    useEffect(() => {
       loadPatients();
@@ -112,9 +111,34 @@ export function ReportsView() {
    }
 
    const loadPatientData = async (patientId: string) => {
-      // Mock SUD data
-      setSudLabels(['Sessão 1', 'Sessão 2', 'Sessão 3', 'Sessão 4', 'Sessão 5']);
-      setSudData([8, 7, 5, 4, 2]);
+      try {
+         // Fetch SUD Data
+         const sudRes = await fetch(`/api/sud?patientId=${patientId}`);
+         if (sudRes.ok) {
+            const sudRecords = await sudRes.json();
+            // Format for Chart
+            const labels = sudRecords.map((r: any) => new Date(r.date || r.created_at).toLocaleDateString());
+            const data = sudRecords.map((r: any) => r.score);
+            setSudLabels(labels);
+            setSudData(data);
+         }
+
+         // Fetch Patient Details for Metadata (Phase)
+         const detailsRes = await fetch(`/api/patient-details?patientId=${patientId}`);
+         if (detailsRes.ok) {
+            // We can store this if we want to display more info, but for now we just want it for AI context
+            // For simplicity, we might just fetch it dynamically in handleGenerate or store strict needed info
+            // But to follow React patterns, let's store the phase
+            const details = await detailsRes.json();
+            if (details.timeline && details.timeline.length > 0) {
+               const lastSession = details.timeline[0]; // Assuming sorted DESC
+               // Parse phase from title "Sessão - X" or just use title
+               setPatientMetadata(prev => ({ ...prev, phase: lastSession.title.split(' - ')[1] || 'Em Andamento' }));
+            }
+         }
+      } catch (error) {
+         console.error('Error loading patient data', error);
+      }
    };
 
    const handleGenerate = async () => {
@@ -124,6 +148,12 @@ export function ReportsView() {
       try {
          const patient = patients.find(p => p.id === selectedPatient);
 
+         // Use metadata from state (fetched from last session) or fallback
+         const metadata = {
+            symptoms: patientMetadata.symptoms !== 'N/A' ? patientMetadata.symptoms : (clinicalNotes.toLowerCase().includes('ansiedade') ? 'Ansiedade' : 'Não especificado'),
+            phase: patientMetadata.phase
+         };
+
          const response = await fetch('/api/ai/report', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -131,7 +161,9 @@ export function ReportsView() {
                patientId: selectedPatient,
                patientName: patient?.name || 'Paciente',
                reportType,
-               therapistId: user?.id || 'demo-therapist'
+               clinicalNotes, // Passing notes
+               therapistId: user?.id || 'demo-therapist',
+               metadata
             })
          });
 
@@ -152,13 +184,22 @@ export function ReportsView() {
 
    const saveReport = async (content: string, patientName?: string) => {
       try {
+         const typeLabels: Record<string, string> = {
+            'evolution': 'Evolução',
+            'laudo': 'Laudo',
+            'atestado': 'Atestado',
+            'encaminhamento': 'Encaminhamento'
+         };
+
+         const typeLabel = typeLabels[reportType] || 'Relatório';
+
          const res = await fetch('/api/reports', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                therapistId: user?.id || 'demo-therapist',
                patientId: selectedPatient,
-               title: `Relatório ${reportType === 'evolution' ? 'de Evolução' : 'Laudo'} - ${new Date().toLocaleDateString()}`,
+               title: `${typeLabel} - ${new Date().toLocaleDateString()}`,
                type: reportType,
                content: content,
                metadata: { generated_by_ai: true }
@@ -191,7 +232,42 @@ export function ReportsView() {
    };
 
    const handleDownload = () => {
-      alert("Funcionalidade de PDF em breve!");
+      if (!currentReport) return;
+
+      import('jspdf').then(({ jsPDF }) => {
+         const doc = new jsPDF();
+
+         // Header
+         doc.setFontSize(20);
+         doc.setTextColor(40, 40, 40);
+         doc.text("Relatório Clínico - TRG Nexus", 20, 20);
+
+         // Metadata
+         doc.setFontSize(10);
+         doc.setTextColor(100, 100, 100);
+         const reportTitle = savedReports.find(r => r.content === currentReport)?.title || 'Relatório Gerado';
+         doc.text(`Título: ${reportTitle}`, 20, 30);
+         doc.text(`Data: ${new Date().toLocaleDateString()}`, 20, 35);
+         if (selectedPatient) {
+            const pName = patients.find(p => p.id === selectedPatient)?.name;
+            doc.text(`Paciente: ${pName || 'N/A'}`, 20, 40);
+         }
+
+         // Content
+         doc.setFontSize(12);
+         doc.setTextColor(0, 0, 0);
+
+         const splitText = doc.splitTextToSize(currentReport, 170);
+         doc.text(splitText, 20, 50);
+
+         // Footer
+         const pageHeight = doc.internal.pageSize.height;
+         doc.setFontSize(8);
+         doc.setTextColor(150, 150, 150);
+         doc.text("Gerado automaticamente por TRG Nexus com Inteligência Artificial.", 20, pageHeight - 10);
+
+         doc.save(`${reportTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`);
+      });
    };
 
    const chartData = {
@@ -310,6 +386,19 @@ export function ReportsView() {
                               </button>
                            ))}
                         </div>
+                     </div>
+
+                     {/* Clinical Notes Input */}
+                     <div className="space-y-2">
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 ml-1">
+                           Observações / Contexto (IA)
+                        </label>
+                        <textarea
+                           value={clinicalNotes}
+                           onChange={(e) => setClinicalNotes(e.target.value)}
+                           className="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-sm min-h-[100px] resize-none"
+                           placeholder="Descreva brevemente o progresso, sintomas ou motivo documento para orientar a IA..."
+                        />
                      </div>
 
                      <button

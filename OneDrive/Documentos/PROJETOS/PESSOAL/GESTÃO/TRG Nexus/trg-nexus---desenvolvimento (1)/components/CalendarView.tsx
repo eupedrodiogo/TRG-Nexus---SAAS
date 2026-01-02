@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import OptimizationModal from './OptimizationModal';
 import {
    ChevronLeft,
    ChevronRight,
@@ -32,6 +33,7 @@ import {
 import { DEFAULT_BLOCKED_TIMES } from '../constants';
 import { Appointment, BlockedTime } from '../types';
 import { api } from '../services/api';
+import { AddToCalendar } from './AddToCalendar';
 
 type ViewType = 'day' | 'week' | 'month' | 'list';
 
@@ -52,13 +54,17 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onNavigateToPatient, onNavi
    const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
    const [suggestedSlot, setSuggestedSlot] = useState<{ date: string, time: string } | null>(null);
    const [isBlockModalOpen, setIsBlockModalOpen] = useState(false);
-   const [blockForm, setBlockForm] = useState({ dayOfWeek: 1, startTime: '12:00', endTime: '13:00', label: '' });
+   const [blockForm, setBlockForm] = useState({ type: 'date', date: '', dayOfWeek: 1, startTime: '12:00', endTime: '13:00', label: '' });
    const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'warning' | 'info' | 'error' } | null>(null);
+   const [isOptimizationModalOpen, setIsOptimizationModalOpen] = useState(false);
+   const [optimizationData, setOptimizationData] = useState<any>(null);
 
    useEffect(() => {
-      const saved = localStorage.getItem('TRG_BLOCKED_TIMES');
-      if (saved) setBlockedTimes(JSON.parse(saved));
-      else setBlockedTimes([]);
+      const fetchBlockedTimes = async () => {
+         const times = await api.blockedTimes.list();
+         if (times) setBlockedTimes(times);
+      };
+      fetchBlockedTimes();
    }, []);
 
    const formatDateKey = (date: Date) => {
@@ -131,7 +137,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onNavigateToPatient, onNavi
       // Check Blocked Times
       const dayOfWeek = date.getDay();
       const isBlocked = blockedTimes.some(block =>
-         block.dayOfWeek === dayOfWeek &&
+         ((block.date === dateKey) || (block.dayOfWeek !== undefined && block.dayOfWeek === dayOfWeek)) &&
          hour >= parseInt(block.startTime.split(':')[0]) &&
          hour < parseInt(block.endTime.split(':')[0])
       );
@@ -158,36 +164,129 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onNavigateToPatient, onNavi
    };
 
    const handleFindSlot = () => {
-      showNotification('IA analisando agenda...', 'info');
+      showNotification('IA: Buscando próxima vaga disponível...', 'info');
+
+      const findNextAvailableSlot = () => {
+         const today = new Date();
+         const next30Days = Array.from({ length: 30 }, (_, i) => {
+            const d = new Date(today);
+            d.setDate(d.getDate() + i + 1); // Start from tomorrow
+            return d;
+         });
+
+         for (const date of next30Days) {
+            // Check hours from 08:00 to 18:00
+            for (let hour = 8; hour < 18; hour++) {
+               const timeString = `${hour.toString().padStart(2, '0')}:00`;
+               if (!isSlotConflicting(date, timeString)) {
+                  return { date, time: timeString };
+               }
+            }
+         }
+         return null;
+      };
+
       setTimeout(() => {
-         const tomorrow = new Date();
-         tomorrow.setDate(tomorrow.getDate() + 1);
-         const dateKey = formatDateKey(tomorrow);
-         setSuggestedSlot({ date: dateKey, time: '14:00' });
-         setCurrentDate(tomorrow);
-         if (viewType === 'month' || viewType === 'list') setViewType('week');
-         showNotification('Horário sugerido encontrado: 14:00', 'success');
-         setTimeout(() => setSuggestedSlot(null), 5000);
-      }, 1000);
+         const slot = findNextAvailableSlot();
+         if (slot) {
+            const dateKey = formatDateKey(slot.date);
+            setSuggestedSlot({ date: dateKey, time: slot.time });
+            setCurrentDate(slot.date);
+            setSelectedDay(slot.date);
+            // Switch to week view to visualize better
+            if (viewType === 'month' || viewType === 'list') setViewType('week');
+
+            showNotification(`Vaga encontrada: ${slot.date.toLocaleDateString('pt-BR')} às ${slot.time}`, 'success');
+
+            // Auto clear suggestion after 10s
+            setTimeout(() => setSuggestedSlot(null), 10000);
+         } else {
+            showNotification('Nenhuma vaga encontrada nos próximos 30 dias.', 'warning');
+         }
+      }, 500); // Small delay for UX "thinking" feel
    };
 
-   const handleOptimizeSchedule = () => {
-      if (window.confirm("A IA irá sugerir reagrupamentos para minimizar janelas vazias. Deseja ver a simulação?")) {
-         showNotification("Calculando otimização...", "info");
-         setTimeout(() => {
-            showNotification("Otimização: 2 janelas de 1h podem ser eliminadas.", "success");
-         }, 2000);
+   const handleOptimizeSchedule = async () => {
+      const confirmOptimize = window.confirm("A IA irá analisar os agendamentos desta semana para sugerir melhorias de produtividade. Deseja continuar?");
+      if (!confirmOptimize) return;
+
+      showNotification("IA: Analisando padrões de agendamento...", "info");
+
+      try {
+         // Get appointments for the currently viewed period (simplified to current week context)
+         const weekStart = new Date(currentDate);
+         weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+         const weekEnd = new Date(weekStart);
+         weekEnd.setDate(weekEnd.getDate() + 6);
+
+         const periodAppointments = appointments.filter(apt => {
+            const d = safeParseDate(apt.date);
+            return d >= weekStart && d <= weekEnd;
+         });
+
+         if (periodAppointments.length === 0) {
+            showNotification("Sem agendamentos nesta semana para otimizar.", "warning");
+            return;
+         }
+
+         const response = await fetch('/api/ai/optimize', {
+            method: 'POST',
+            headers: {
+               'Content-Type': 'application/json',
+               'Authorization': `Bearer ${localStorage.getItem('trg_token')}` // Ensure auth if needed, though usually cookie based in this stack
+            },
+            body: JSON.stringify({
+               appointments: periodAppointments,
+               blockedTimes: blockedTimes,
+               dateRange: `${weekStart.toLocaleDateString()} - ${weekEnd.toLocaleDateString()}`
+            })
+         });
+
+         if (response.ok) {
+            const data = await response.json();
+            setOptimizationData(data);
+            setIsOptimizationModalOpen(true);
+            showNotification("Análise de otimização concluída!", "success");
+         } else {
+            throw new Error('Falha na resposta da IA');
+         }
+
+      } catch (error) {
+         console.error(error);
+         showNotification("Erro ao conectar com a IA de otimização.", "error");
       }
    };
 
-   const handleSaveBlock = () => {
+   const handleSaveBlock = async () => {
       if (!blockForm.label || !blockForm.startTime || !blockForm.endTime) { showNotification('Preencha todos os campos.', 'warning'); return; }
-      const newBlock: BlockedTime = { id: Date.now().toString(), dayOfWeek: Number(blockForm.dayOfWeek), startTime: blockForm.startTime, endTime: blockForm.endTime, label: blockForm.label };
-      const updatedBlocks = [...blockedTimes, newBlock];
-      setBlockedTimes(updatedBlocks);
-      localStorage.setItem('TRG_BLOCKED_TIMES', JSON.stringify(updatedBlocks));
-      setIsBlockModalOpen(false);
-      showNotification('Horário bloqueado.', 'success');
+
+      try {
+         const payload: any = {
+            startTime: blockForm.startTime,
+            endTime: blockForm.endTime,
+            label: blockForm.label
+         };
+
+         if (blockForm.type === 'weekly') {
+            payload.dayOfWeek = Number(blockForm.dayOfWeek);
+         } else {
+            payload.date = blockForm.date || formatDateKey(selectedDay);
+         }
+
+         const newBlock = await api.blockedTimes.create(payload);
+
+         const updatedBlocks = [...blockedTimes, newBlock];
+         setBlockedTimes(updatedBlocks);
+         setIsBlockModalOpen(false);
+         showNotification('Horário bloqueado com sucesso.', 'success');
+      } catch (e) {
+         showNotification('Erro ao bloquear horário.', 'error');
+      }
+   };
+
+   const openBlockModal = () => {
+      setBlockForm(prev => ({ ...prev, type: 'date', date: formatDateKey(selectedDay), startTime: '09:00', endTime: '10:00', label: '' }));
+      setIsBlockModalOpen(true);
    };
 
    const handleQuickAdd = (date: Date, time: string) => {
@@ -229,6 +328,40 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onNavigateToPatient, onNavi
       } catch (e) { showNotification("Erro ao exportar.", "warning"); }
    };
 
+   const handleApplyOptimization = async () => {
+      if (!optimizationData || !optimizationData.suggestions) return;
+
+      setIsOptimizationModalOpen(false);
+      showNotification("IA: Aplicando otimizações...", "info");
+
+      try {
+         const suggestions = optimizationData.suggestions;
+         let appliedCount = 0;
+
+         // Execute updates in parallel
+         await Promise.all(suggestions.map(async (suggestion: any) => {
+            if (suggestion.originalAppointmentId) {
+               await api.appointments.update(suggestion.originalAppointmentId, {
+                  date: suggestion.suggestedDate,
+                  time: suggestion.suggestedTime
+               });
+               appliedCount++;
+            }
+         }));
+
+         // Refresh the calendar
+         const refreshed = await api.appointments.list();
+         setAppointments(refreshed);
+
+         showNotification(`${appliedCount} agendamentos otimizados com sucesso!`, "success");
+         setOptimizationData(null); // Clear data
+
+      } catch (error) {
+         console.error("Error applying optimization:", error);
+         showNotification("Erro ao aplicar as mudanças.", "error");
+      }
+   };
+
    const handleStartSession = () => {
       if (!selectedAppointment) return;
       // Save patient ID to localStorage so SessionView can pick it up
@@ -247,7 +380,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onNavigateToPatient, onNavi
       const list = filteredAppointments.filter(apt => apt.date === k);
       return list.sort((a, b) => (a?.time || '').localeCompare(b?.time || ''));
    };
-   const getBlockedTimeForDay = (date: Date) => { const d = date.getDay(); return blockedTimes.filter(b => b.dayOfWeek === d); };
+   const getBlockedTimeForDay = (date: Date) => {
+      const d = date.getDay();
+      const k = formatDateKey(date);
+      return blockedTimes.filter(b => (b.date === k) || (b.dayOfWeek === d));
+   };
    const weekDays = [{ val: 0, label: 'Domingo', short: 'Dom' }, { val: 1, label: 'Segunda', short: 'Seg' }, { val: 2, label: 'Terça', short: 'Ter' }, { val: 3, label: 'Quarta', short: 'Qua' }, { val: 4, label: 'Quinta', short: 'Qui' }, { val: 5, label: 'Sexta', short: 'Sex' }, { val: 6, label: 'Sábado', short: 'Sáb' }];
 
    const renderMonthView = () => {
@@ -350,9 +487,14 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onNavigateToPatient, onNavi
                      </p>
                   )}
                </div>
-               <button className="p-2 bg-white dark:bg-slate-800 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm text-primary-600">
-                  <Plus size={20} />
-               </button>
+               <div className="flex gap-2">
+                  <button onClick={openBlockModal} className="p-2 bg-white dark:bg-slate-800 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm text-red-500 hover:text-red-600">
+                     <Ban size={20} />
+                  </button>
+                  <button className="p-2 bg-white dark:bg-slate-800 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm text-primary-600">
+                     <Plus size={20} />
+                  </button>
+               </div>
             </div>
 
             <div className="p-4 space-y-4">
@@ -391,7 +533,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onNavigateToPatient, onNavi
       return (
          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 overflow-hidden flex flex-col h-[600px]">
             <div className="flex border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950"><div className="w-12 border-r border-slate-200 dark:border-slate-800 shrink-0"></div>{weekDates.map((date, i) => (<div key={i} className={`flex-1 p-3 text-center border-r border-slate-200 dark:border-slate-800 last:border-none ${isSameDate(date, new Date()) ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}><p className="text-xs font-bold uppercase text-slate-400 mb-1">{weekDays[date.getDay()].short}</p><div className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${isSameDate(date, new Date()) ? 'bg-primary-600 text-white' : 'text-slate-700 dark:text-slate-300'}`}>{date.getDate()}</div></div>))}</div>
-            <div className="flex-1 overflow-y-auto custom-scrollbar">{hours.map(hour => (<div key={hour} className="flex border-b border-slate-100 dark:border-slate-800 min-h-[80px]"><div className="w-12 border-r border-slate-100 dark:border-slate-800 p-2 text-[10px] font-bold text-slate-400 text-right bg-slate-50/30 dark:bg-slate-950/30">{hour}:00</div>{weekDates.map((date, i) => { const apts = getAppointmentsForDate(date).filter(a => parseInt(a.time.split(':')[0]) === hour); const blocked = getBlockedTimeForDay(date).some(b => parseInt(b.startTime.split(':')[0]) === hour); const isSuggested = suggestedSlot && suggestedSlot.date === formatDateKey(date) && parseInt(suggestedSlot.time.split(':')[0]) === hour; return (<div key={i} className={`flex-1 border-r border-slate-100 dark:border-slate-800 p-1 relative group transition-colors ${blocked ? 'bg-stripes-gray opacity-50 cursor-not-allowed' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer'} ${isSuggested ? 'bg-yellow-50 dark:bg-yellow-900/20 ring-inset ring-2 ring-amber-300 dark:ring-amber-700' : ''}`} onClick={() => !blocked && apts.length === 0 && handleQuickAdd(date, `${hour}:00`)}>{blocked && <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"><Ban size={16} className="text-slate-400" /></div>}{apts.map(apt => (<div key={apt.id} onClick={(e) => { e.stopPropagation(); setSelectedAppointment(apt); }} className={`text-[10px] p-1.5 rounded mb-1 cursor-pointer truncate shadow-sm hover:shadow-md transition-all border-l-2 ${apt.status === 'Agendado' ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-800 dark:text-primary-200 border-primary-500' : apt.status === 'Concluído' ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200 border-green-500' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`} title={`${apt.time} - ${apt.patientName}`}><span className="font-bold block">{apt.time}</span>{apt.patientName.split(' ')[0]}</div>))}</div>); })}</div>))}</div>
+            <div className="flex-1 overflow-y-auto custom-scrollbar">{hours.map(hour => (<div key={hour} className="flex border-b border-slate-100 dark:border-slate-800 min-h-[80px]"><div className="w-12 border-r border-slate-100 dark:border-slate-800 p-2 text-[10px] font-bold text-slate-400 text-right bg-slate-50/30 dark:bg-slate-950/30">{hour}:00</div>{weekDates.map((date, i) => { const apts = getAppointmentsForDate(date).filter(a => parseInt(a.time.split(':')[0]) === hour); const blocked = getBlockedTimeForDay(date).some(b => parseInt(b.startTime.split(':')[0]) <= hour && parseInt(b.endTime.split(':')[0]) > hour); const isSuggested = suggestedSlot && suggestedSlot.date === formatDateKey(date) && parseInt(suggestedSlot.time.split(':')[0]) === hour; return (<div key={i} className={`flex-1 border-r border-slate-100 dark:border-slate-800 p-1 relative group transition-colors ${blocked ? 'bg-stripes-gray opacity-50 cursor-not-allowed' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer'} ${isSuggested ? 'bg-yellow-50 dark:bg-yellow-900/20 ring-inset ring-2 ring-amber-300 dark:ring-amber-700' : ''}`} onClick={() => !blocked && apts.length === 0 && handleQuickAdd(date, `${hour}:00`)}>{blocked && <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"><Ban size={16} className="text-slate-400" /></div>}{apts.map(apt => (<div key={apt.id} onClick={(e) => { e.stopPropagation(); setSelectedAppointment(apt); }} className={`text-[10px] p-1.5 rounded mb-1 cursor-pointer truncate shadow-sm hover:shadow-md transition-all border-l-2 ${apt.status === 'Agendado' ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-800 dark:text-primary-200 border-primary-500' : apt.status === 'Concluído' ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200 border-green-500' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`} title={`${apt.time} - ${apt.patientName}`}><span className="font-bold block">{apt.time}</span>{apt.patientName.split(' ')[0]}</div>))}</div>); })}</div>))}</div>
          </div>
       );
    };
@@ -460,8 +602,10 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onNavigateToPatient, onNavi
             </div>
             <div className="flex flex-wrap items-center gap-3">
                <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">{[{ id: 'day', label: 'Dia', icon: Clock }, { id: 'week', label: 'Semana', icon: LayoutGrid }, { id: 'month', label: 'Mês', icon: CalendarIcon }, { id: 'list', label: 'Lista', icon: List }].map(v => (<button key={v.id} onClick={() => setViewType(v.id as ViewType)} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${viewType === v.id ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}><v.icon size={14} className="hidden sm:block" /> {v.label}</button>))}</div>
-               <button onClick={() => setIsBlockModalOpen(true)} className="p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-500 hover:text-red-500"><Ban size={20} /></button>
-               <button onClick={handleExportICS} className="p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-500 hover:text-primary-600"><Download size={20} /></button>
+               <button onClick={openBlockModal} className="p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-500 hover:text-red-500"><Ban size={20} /></button>
+               <button onClick={handleExportICS} title="Exportar Agenda (.ics)" className="p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-500 hover:text-primary-600 transition-colors">
+                  <Download size={20} />
+               </button>
                <button onClick={handleFindSlot} className="hidden md:flex items-center gap-2 px-4 py-2.5 bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 dark:hover:bg-slate-600 text-white rounded-xl font-bold shadow-lg"><Zap size={16} className="text-yellow-400" /> Encontrar Vaga</button>
             </div>
          </div>
@@ -497,7 +641,34 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onNavigateToPatient, onNavi
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
                <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-slide-up ring-1 ring-slate-200 dark:ring-slate-800">
                   <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-start bg-slate-50 dark:bg-slate-950"><div><span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider mb-2 inline-block ${selectedAppointment.status === 'Agendado' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>{selectedAppointment.status}</span><h3 className="text-xl font-bold text-slate-800 dark:text-white">{selectedAppointment.patientName}</h3><p className="text-sm text-slate-500">{selectedAppointment.type}</p></div><button onClick={() => setSelectedAppointment(null)} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400"><X size={20} /></button></div>
-                  <div className="p-6 space-y-4"><div className="flex gap-4"><div className="flex-1 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700"><p className="text-xs text-slate-400 font-bold uppercase mb-1">Data</p><p className="font-semibold text-slate-800 dark:text-white flex items-center gap-2"><CalendarIcon size={16} /> {new Date(selectedAppointment.date).toLocaleDateString('pt-BR')}</p></div><div className="flex-1 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700"><p className="text-xs text-slate-400 font-bold uppercase mb-1">Horário</p><p className="font-semibold text-slate-800 dark:text-white flex items-center gap-2"><Clock size={16} /> {selectedAppointment.time}</p></div></div><div className="flex gap-2"><button onClick={() => onNavigateToPatient?.(selectedAppointment.patientId)} className="flex-1 py-2.5 bg-slate-800 dark:bg-slate-700 text-white font-bold rounded-xl hover:bg-slate-900 transition-colors text-sm flex items-center justify-center gap-2"><User size={16} /> Ver Ficha</button><button onClick={handleStartSession} className="flex-1 py-2.5 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-sm flex items-center justify-center gap-2"><BrainCircuit size={16} /> Iniciar Sessão</button></div><div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center"><button onClick={handleCancelAppointment} className="text-red-500 text-sm font-bold hover:underline">Cancelar Agendamento</button><button onClick={handleReschedule} className="text-primary-600 dark:text-secondary-400 text-sm font-bold hover:underline">Reagendar</button></div></div>
+                  <div className="p-6 space-y-4">
+                     <div className="flex gap-4">
+                        <div className="flex-1 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                           <p className="text-xs text-slate-400 font-bold uppercase mb-1">Data</p>
+                           <p className="font-semibold text-slate-800 dark:text-white flex items-center gap-2"><CalendarIcon size={16} /> {new Date(selectedAppointment.date).toLocaleDateString('pt-BR')}</p>
+                        </div>
+                        <div className="flex-1 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                           <p className="text-xs text-slate-400 font-bold uppercase mb-1">Horário</p>
+                           <p className="font-semibold text-slate-800 dark:text-white flex items-center gap-2"><Clock size={16} /> {selectedAppointment.time}</p>
+                        </div>
+                     </div>
+
+                     <div className="p-3 bg-primary-50 dark:bg-primary-900/20 rounded-xl border border-primary-100 dark:border-primary-900/30">
+                        <AddToCalendar
+                           title={`Sessão TRG: ${selectedAppointment.patientName}`}
+                           date={selectedAppointment.date}
+                           time={selectedAppointment.time}
+                           description={`Paciente: ${selectedAppointment.patientName}\nTipo: ${selectedAppointment.type}\nStatus: ${selectedAppointment.status}`}
+                           className="w-full"
+                        />
+                     </div>
+
+                     <div className="flex gap-2">
+                        <button onClick={() => onNavigateToPatient?.(selectedAppointment.patientId)} className="flex-1 py-2.5 bg-slate-800 dark:bg-slate-700 text-white font-bold rounded-xl hover:bg-slate-900 transition-colors text-sm flex items-center justify-center gap-2"><User size={16} /> Ver Ficha</button>
+                        <button onClick={handleStartSession} className="flex-1 py-2.5 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-sm flex items-center justify-center gap-2"><BrainCircuit size={16} /> Iniciar Sessão</button>
+                     </div>
+                     <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center"><button onClick={handleCancelAppointment} className="text-red-500 text-sm font-bold hover:underline">Cancelar Agendamento</button><button onClick={handleReschedule} className="text-primary-600 dark:text-secondary-400 text-sm font-bold hover:underline">Reagendar</button></div>
+                  </div>
                </div>
             </div>
          )}
@@ -506,10 +677,88 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onNavigateToPatient, onNavi
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
                <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl shadow-2xl p-6 animate-slide-up ring-1 ring-slate-200 dark:ring-slate-800">
                   <div className="flex justify-between items-center mb-6"><h3 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2"><Ban size={20} className="text-red-500" /> Bloquear Horário</h3><button onClick={() => setIsBlockModalOpen(false)}><X size={20} className="text-slate-400" /></button></div>
-                  <div className="space-y-4"><div><label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Dia da Semana</label><select className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none dark:text-white" value={blockForm.dayOfWeek} onChange={(e) => setBlockForm({ ...blockForm, dayOfWeek: parseInt(e.target.value) })}>{weekDays.map(d => <option key={d.val} value={d.val}>{d.label}</option>)}</select></div><div className="grid grid-cols-2 gap-3"><div><label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Início</label><input type="time" className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none dark:text-white" value={blockForm.startTime} onChange={(e) => setBlockForm({ ...blockForm, startTime: e.target.value })} /></div><div><label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Fim</label><input type="time" className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none dark:text-white" value={blockForm.endTime} onChange={(e) => setBlockForm({ ...blockForm, endTime: e.target.value })} /></div></div><div><label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Rótulo</label><input type="text" placeholder="Ex: Almoço" className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none dark:text-white" value={blockForm.label} onChange={(e) => setBlockForm({ ...blockForm, label: e.target.value })} /></div><button onClick={handleSaveBlock} className="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-lg transition-colors">Confirmar Bloqueio</button></div>
+                  <div className="space-y-4">
+                     <div className="flex gap-2 mb-4 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+                        <button
+                           onClick={() => setBlockForm({ ...blockForm, type: 'date' })}
+                           className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${blockForm.type === 'date' ? 'bg-white dark:bg-slate-700 shadow text-slate-800 dark:text-white' : 'text-slate-500'}`}
+                        >
+                           Data Específica
+                        </button>
+                        <button
+                           onClick={() => setBlockForm({ ...blockForm, type: 'weekly' })}
+                           className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${blockForm.type === 'weekly' ? 'bg-white dark:bg-slate-700 shadow text-slate-800 dark:text-white' : 'text-slate-500'}`}
+                        >
+                           Semanal (Recorrente)
+                        </button>
+                     </div>
+
+                     {blockForm.type === 'date' ? (
+                        <div>
+                           <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Data</label>
+                           <input
+                              type="date"
+                              className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none dark:text-white"
+                              value={blockForm.date}
+                              onChange={(e) => setBlockForm({ ...blockForm, date: e.target.value })}
+                           />
+                        </div>
+                     ) : (
+                        <div>
+                           <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Dia da Semana</label>
+                           <select className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none dark:text-white" value={blockForm.dayOfWeek} onChange={(e) => setBlockForm({ ...blockForm, dayOfWeek: parseInt(e.target.value) })}>{weekDays.map(d => <option key={d.val} value={d.val}>{d.label}</option>)}</select>
+                        </div>
+                     )}
+
+                     <div className="flex items-center gap-2 mb-2">
+                        <input
+                           type="checkbox"
+                           id="allDay"
+                           className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                           checked={blockForm.startTime === '00:00' && blockForm.endTime === '23:59'}
+                           onChange={(e) => {
+                              if (e.target.checked) {
+                                 setBlockForm({ ...blockForm, startTime: '00:00', endTime: '23:59' });
+                              } else {
+                                 setBlockForm({ ...blockForm, startTime: '09:00', endTime: '18:00' });
+                              }
+                           }}
+                        />
+                        <label htmlFor="allDay" className="text-sm font-bold text-slate-600 dark:text-slate-300 cursor-pointer">Bloquear dia todo</label>
+                     </div>
+
+                     <div className="grid grid-cols-2 gap-3">
+                        <div>
+                           <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Início</label>
+                           <input
+                              type="time"
+                              className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                              value={blockForm.startTime}
+                              onChange={(e) => setBlockForm({ ...blockForm, startTime: e.target.value })}
+                              disabled={blockForm.startTime === '00:00' && blockForm.endTime === '23:59'}
+                           />
+                        </div>
+                        <div>
+                           <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Fim</label>
+                           <input
+                              type="time"
+                              className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                              value={blockForm.endTime}
+                              onChange={(e) => setBlockForm({ ...blockForm, endTime: e.target.value })}
+                              disabled={blockForm.startTime === '00:00' && blockForm.endTime === '23:59'}
+                           />
+                        </div>
+                     </div>
+                     <div><label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Rótulo</label><input type="text" placeholder="Ex: Almoço" className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none dark:text-white" value={blockForm.label} onChange={(e) => setBlockForm({ ...blockForm, label: e.target.value })} /></div><button onClick={handleSaveBlock} className="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-lg transition-colors">Confirmar Bloqueio</button></div>
                </div>
             </div>
          )}
+         <OptimizationModal
+            isOpen={isOptimizationModalOpen}
+            onClose={() => setIsOptimizationModalOpen(false)}
+            data={optimizationData}
+            onApply={handleApplyOptimization}
+         />
       </div>
    );
 };

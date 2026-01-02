@@ -38,6 +38,7 @@ import {
   Bar
 } from 'recharts';
 import AddPatientModal from './AddPatientModal';
+import PushNotificationManager from './PushNotificationManager';
 
 interface DashboardProps {
   isDarkMode?: boolean;
@@ -127,6 +128,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode = false, onOpenNotific
 
   return (
     <div className="space-y-6 animate-fade-in pb-20 md:pb-0">
+      <PushNotificationManager />
 
       {/* Header & Quick Actions */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
@@ -136,13 +138,6 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode = false, onOpenNotific
             <p className="text-slate-500 dark:text-slate-400 text-sm md:text-base mt-1">
               Bem-vindo de volta, {therapist?.name || 'Terapeuta'}.
             </p>
-            {bookingLink && (
-              <div className="mt-2 flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 px-3 py-1.5 rounded-lg border border-blue-100 dark:border-blue-800 w-fit">
-                <span className="text-xs font-bold text-blue-700 dark:text-blue-300">Seu Link:</span>
-                <code className="text-xs text-slate-600 dark:text-slate-400 select-all">{bookingLink}</code>
-                <button onClick={copyLink} className="text-xs font-bold text-blue-600 hover:underline ml-2">Copiar</button>
-              </div>
-            )}
           </div>
         </div>
 

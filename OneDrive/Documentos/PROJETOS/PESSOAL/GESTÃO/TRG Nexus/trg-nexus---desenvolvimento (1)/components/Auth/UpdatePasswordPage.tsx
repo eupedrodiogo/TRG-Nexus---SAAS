@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { BrainCircuit, Lock, ArrowRight, Loader2, CheckCircle2 } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 
 const UpdatePasswordPage: React.FC = () => {
     const [password, setPassword] = useState('');
@@ -9,6 +9,37 @@ const UpdatePasswordPage: React.FC = () => {
     const [error, setError] = useState('');
     const [isSuccess, setIsSuccess] = useState(false);
     const navigate = useNavigate();
+    const location = useLocation();
+
+    useEffect(() => {
+        // Check for error in hash (redirected from App.tsx)
+        const hash = location.hash;
+        if (hash && hash.includes('error=')) {
+            const params = new URLSearchParams(hash.substring(1)); // remove #
+            const errorDescription = params.get('error_description');
+            if (errorDescription) {
+                if (errorDescription.includes('expired')) {
+                    setError('O link de recuperação expirou. Por favor, solicite um novo.');
+                } else {
+                    setError(decodeURIComponent(errorDescription).replace(/\+/g, ' '));
+                }
+            }
+        }
+
+        // Listen for auth state changes to confirm we have a valid session for recovery
+        const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+            console.log("UpdatePasswordPage Auth Event:", event);
+            if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
+                // We have a session, safe to update password
+                setError('');
+            }
+        });
+
+        return () => {
+            authListener.subscription.unsubscribe();
+        };
+
+    }, [location]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -16,6 +47,14 @@ const UpdatePasswordPage: React.FC = () => {
         setIsLoading(true);
 
         try {
+            // Verify session existence before attempting update
+            const { data: { session } } = await supabase.auth.getSession();
+
+            if (!session) {
+                // If no session, try parsing hash again or warn user
+                throw new Error('Sessão expirada ou inválida. Por favor, clique no link do email novamente.');
+            }
+
             const { error: updateError } = await supabase.auth.updateUser({
                 password: password
             });
@@ -30,7 +69,8 @@ const UpdatePasswordPage: React.FC = () => {
             }, 3000);
 
         } catch (err: any) {
-            setError(err.message);
+            console.error(err);
+            setError(err.message || "Erro ao atualizar senha");
         } finally {
             setIsLoading(false);
         }

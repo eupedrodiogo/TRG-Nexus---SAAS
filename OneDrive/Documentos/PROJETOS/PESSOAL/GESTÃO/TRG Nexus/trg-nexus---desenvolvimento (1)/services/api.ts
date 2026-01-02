@@ -167,6 +167,31 @@ export const api = {
     }
   },
 
+  blockedTimes: {
+    list: async () => {
+      try {
+        return await apiFetch('/api/blocked-slots');
+      } catch (e) { console.warn('Fetch blocked times failed, using local'); }
+
+      const saved = localStorage.getItem('TRG_BLOCKED_TIMES');
+      return saved ? JSON.parse(saved) : [];
+    },
+    create: async (data: any) => {
+      try {
+        return await apiFetch('/api/blocked-slots', { method: 'POST', body: JSON.stringify(data) });
+      } catch (e) {
+        console.warn('Create blocked time failed, using local');
+        // Fallback to local
+        throw new Error('Fallback not implemented for create (use online)');
+      }
+    },
+    delete: async (id: string) => {
+      try {
+        return await apiFetch(`/api/blocked-slots?id=${id}`, { method: 'DELETE' });
+      } catch (e) { console.warn('Delete blocked time failed'); }
+    }
+  },
+
   dashboard: {
     stats: async () => {
       try { return await apiFetch('/api/dashboard/stats'); }

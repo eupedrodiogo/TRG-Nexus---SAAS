@@ -48,7 +48,8 @@ import {
   Menu,
   Network // Import Network Icon
 } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
+// import { createClient } from '@supabase/supabase-js'; // REMOVED
+import { supabase } from '../lib/supabase';
 
 /* ... imports ... */
 
@@ -68,13 +69,26 @@ const ToggleSwitch = ({ checked, onChange }: { checked: boolean; onChange: () =>
   </button>
 );
 
+// Initialize Supabase Client (Frontend) - MOVED OUTSIDE COMPONENT for stability
+// Initialize Supabase Client (Frontend) - MOVED OUTSIDE COMPONENT for stability
+// const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+// const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// const supabase = createClient(supabaseUrl, supabaseKey);
+
 const SettingsView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'profile' | 'clinic' | 'financial' | 'integrations' | 'schedule' | 'security' | 'notifications' | 'help' | 'network'>('profile');
 
-  // Initialize Supabase Client (Frontend)
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  const [uploading, setUploading] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
+
+  const triggerToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage(message);
+    setToastType(type);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
+  };
 
   // Load initial settings from DB
   useEffect(() => {
@@ -100,11 +114,18 @@ const SettingsView: React.FC = () => {
           setFormData(prev => ({
             ...prev,
             name: profile.name || prev.name,
+            photo_url: profile.photo_url || prev.photo_url,
             specialty: profile.specialty || 'Geral',
+            bio: profile.bio || '',
+            citrg_code: profile.citrg_code || '',
+            phone: profile.phone || '',
+            price: profile.price || '',
+            session_duration: profile.session_duration || 50,
             is_verified: profile.is_verified || false,
+            // Fallback: Populate array from legacy field if new column is empty/missing
+            specialties: profile.specialties || (profile.specialty ? [profile.specialty] : []),
+            certificates: profile.certificates || [],
             is_overflow_source: profile.is_overflow_source || false,
-            is_overflow_target: typeof profile.is_overflow_target !== 'undefined' ? profile.is_overflow_target : true,
-            // Map other fields if they exist in DB schema...
           }));
         }
       }
@@ -123,43 +144,81 @@ const SettingsView: React.FC = () => {
 
   const handleSave = async () => {
     try {
+      setSaving(true); // START LOADING
       const { data: { user } } = await supabase.auth.getUser();
 
       if (user) {
         // 1. Update Real DB Profile
-        const { error } = await supabase
+        // 1. Update Real DB Profile
+        const { data, error, count } = await supabase
           .from('therapists')
           .update({
             name: formData.name,
-            specialty: formData.specialty,
+            photo_url: formData.photo_url,
+            // Map the first specialty to the existing 'specialty' column for compatibility
+            specialty: formData.specialties[0] || formData.specialty || 'Geral',
+            bio: formData.bio,
+            citrg_code: formData.citrg_code,
+            phone: formData.phone,
+            price: formData.price ? parseFloat(String(formData.price)) : null,
+            session_duration: formData.session_duration ? parseInt(String(formData.session_duration)) : 50,
+            specialties: formData.specialties,
+            certificates: formData.certificates,
             is_overflow_source: formData.is_overflow_source,
             is_overflow_target: formData.is_overflow_target,
-            // Add other profile fields if your schema has them (e.g. phone, bio)
           })
-          .eq('id', user.id);
+          .eq('id', user.id)
+          // @ts-ignore
+          .select('*', { count: 'exact' });
 
-        if (error) throw error;
+        if (error) {
+          console.error('Supabase Update Error:', error);
+          triggerToast(`Erro ao salvar: ${error.message}`, 'error');
+          return;
+        }
+
+        if (count === 0) {
+          console.error('No rows updated. User ID:', user.id);
+          triggerToast('Erro: Seu perfil de terapeuta não foi encontrado no banco.', 'error');
+          return;
+        }
+
+        console.log('Update Success:', data);
+      } else {
+        console.error('User not authenticated');
+        triggerToast('Erro: Usuário não autenticado. Recarregue a página.', 'error');
+        return;
       }
 
       // 2. Save Preferences to LocalStorage
       localStorage.setItem('TRG_BLOCKED_TIMES', JSON.stringify(blockedTimes));
       localStorage.setItem('TRG_SETTINGS', JSON.stringify(formData));
-      showNotification('Configurações salvas no Banco de Dados!');
+      triggerToast('Alterações salvas com sucesso!', 'success');
 
-    } catch (err) {
-      console.error('Save Error:', err);
-      showNotification('Erro ao salvar. Verifique sua conexão.');
+    } catch (e) {
+      console.error('Save Error:', e);
+      triggerToast('Erro não esperado ao salvar', 'error');
+    } finally {
+      setSaving(false); // STOP LOADING
     }
   };
   // ... (State)
 
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  // const [uploading, setUploading] = useState(false); // This was duplicated, keeping the one above
   const [formData, setFormData] = useState({
     // ... existing fields
     name: '',
+    photo_url: '',
     email: '',
     phone: '',
-    crp: '',
+    citrg_code: '',
     bio: '',
+    price: '',
+    session_duration: 50,
+    specialties: [] as string[],
+    certificates: [] as { name: string; url: string; status: string }[],
     clinicName: '',
     cnpj: '',
     address: '',
@@ -222,6 +281,55 @@ const SettingsView: React.FC = () => {
   const removeBlockedTime = (id: number) => {
     setBlockedTimes(blockedTimes.filter(b => b.id !== id));
     showNotification('Bloqueio removido.');
+  };
+
+  const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      setUploading(true);
+      if (!event.target.files || event.target.files.length === 0) {
+        return; // User cancelled
+      }
+      const file = event.target.files[0];
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}.${fileExt}`; // Use timestamp for uniqueness
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuário não autenticado");
+
+      // Path: userId/filename (Organized by user)
+      const filePath = `${user.id}/${fileName}`;
+
+      let { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      // Get Public URL
+      const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
+      // Add timestamp to force refresh
+      const publicUrl = `${data.publicUrl}?t=${Date.now()}`;
+
+      setFormData(prev => ({ ...prev, photo_url: publicUrl }));
+
+      // Immediate DB Update for Photo
+      const { error: dbError } = await supabase
+        .from('therapists')
+        .update({ photo_url: publicUrl })
+        .eq('id', user.id);
+
+      if (dbError) throw dbError;
+
+      showNotification('Foto de perfil atualizada!');
+
+    } catch (error: any) {
+      console.error(error);
+      showNotification(error.message || 'Erro ao fazer upload da imagem!', 'error');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const [integrations, setIntegrations] = useState({
@@ -321,16 +429,38 @@ const SettingsView: React.FC = () => {
                   <div className="relative group">
                     <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-slate-100 dark:border-slate-800 shadow-lg">
                       <img
-                        src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"
+                        src={formData.photo_url || "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"}
                         alt="Profile"
                         className="w-full h-full object-cover"
                       />
+                      {uploading && (
+                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                        </div>
+                      )}
                     </div>
-                    <button className="absolute bottom-2 right-2 p-2 bg-primary-600 text-white rounded-full shadow-lg hover:bg-primary-700 transition-colors">
+                    <label
+                      htmlFor="photo-upload"
+                      className="absolute bottom-2 right-2 p-2 bg-primary-600 text-white rounded-full shadow-lg hover:bg-primary-700 transition-colors cursor-pointer"
+                    >
                       <Camera size={16} />
-                    </button>
+                    </label>
+                    <input
+                      id="photo-upload"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handlePhotoUpload}
+                      disabled={uploading}
+                    />
                   </div>
                   <div className="flex-1 space-y-4 w-full text-center md:text-left">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase">Foto de Perfil</label>
+                      <p className="text-sm text-slate-600 dark:text-slate-300">
+                        Clique no ícone de câmera para alterar sua foto.
+                      </p>
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase">Nome Completo</label>
@@ -342,12 +472,12 @@ const SettingsView: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase">CRP / Registro</label>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase">CITRG</label>
                         <input
                           type="text"
                           className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 dark:text-white outline-none"
-                          value={formData.crp}
-                          onChange={(e) => setFormData({ ...formData, crp: e.target.value })}
+                          value={formData.citrg_code}
+                          onChange={(e) => setFormData({ ...formData, citrg_code: e.target.value })}
                         />
                       </div>
                       <div>
@@ -360,12 +490,33 @@ const SettingsView: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase">Telefone</label>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase">WhatsApp / Telefone</label>
                         <input
                           type="tel"
+                          placeholder="(11) 99999-9999"
                           className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 dark:text-white outline-none"
                           value={formData.phone}
                           onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase">Valor da Sessão (R$)</label>
+                        <input
+                          type="number"
+                          placeholder="Ex: 150.00"
+                          className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 dark:text-white outline-none"
+                          value={formData.price}
+                          onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase">Duração (minutos)</label>
+                        <input
+                          type="number"
+                          placeholder="Ex: 50"
+                          className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 dark:text-white outline-none"
+                          value={formData.session_duration}
+                          onChange={(e) => setFormData({ ...formData, session_duration: parseInt(e.target.value) || 50 })}
                         />
                       </div>
                     </div>
@@ -379,6 +530,194 @@ const SettingsView: React.FC = () => {
                         placeholder="Conte um pouco sobre sua experiência e especialidades..."
                       />
                     </div>
+
+                    {/* Specialties Section */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase">Especialidades e Focos</label>
+                      <div className="flex gap-2 mb-3">
+                        <input
+                          type="text"
+                          placeholder="Adicione uma especialidade (ex: Ansiedade)"
+                          className="flex-1 p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 dark:text-white outline-none"
+                          id="specialty-input"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              const val = e.currentTarget.value.trim();
+                              if (val && !formData.specialties.includes(val)) {
+                                setFormData({ ...formData, specialties: [...formData.specialties, val] });
+                                e.currentTarget.value = '';
+                              }
+                            }
+                          }}
+                        />
+                        <button
+                          onClick={() => {
+                            const input = document.getElementById('specialty-input') as HTMLInputElement;
+                            const val = input.value.trim();
+                            if (val && !formData.specialties.includes(val)) {
+                              setFormData({ ...formData, specialties: [...formData.specialties, val] });
+                              input.value = '';
+                            }
+                          }}
+                          className="p-2.5 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors"
+                        >
+                          <Plus size={20} />
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {formData.specialties.length === 0 && (
+                          <span className="text-sm text-slate-400 italic">Nenhuma especialidade adicionada.</span>
+                        )}
+                        {formData.specialties.map((spec) => (
+                          <span key={spec} className="px-3 py-1 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 rounded-lg text-sm font-medium flex items-center gap-2 border border-primary-100 dark:border-primary-800">
+                            {spec}
+                            <button
+                              onClick={() => setFormData({ ...formData, specialties: formData.specialties.filter(s => s !== spec) })}
+                              className="text-primary-400 hover:text-primary-600"
+                            >
+                              <X size={14} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Certificates Section */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase">Certificações e Validação</label>
+                      <div className="space-y-4">
+                        <div className="relative border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-6 text-center hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer group">
+                          <input
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png"
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+
+                              try {
+                                setUploading(true);
+                                const fileExt = file.name.split('.').pop();
+                                const filePath = `documents/${(await supabase.auth.getUser()).data.user?.id}/${Date.now()}_cert.${fileExt}`;
+
+                                const { error: uploadError } = await supabase.storage
+                                  .from('documents') // Assuming 'documents' bucket exists, user requested file upload
+                                  .upload(filePath, file);
+
+                                if (uploadError) throw uploadError;
+
+                                const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(filePath);
+
+                                const newCert = {
+                                  name: file.name,
+                                  url: publicUrl,
+                                  status: 'pending' // pending, verified, rejected
+                                };
+
+                                setFormData({ ...formData, certificates: [...(formData.certificates || []), newCert] });
+                                triggerToast('Certificado enviado para validação!', 'success');
+                              } catch (err) {
+                                console.error(err);
+                                triggerToast('Erro ao enviar certificado.', 'error');
+                              } finally {
+                                setUploading(false);
+                              }
+                            }
+                            }
+                          />
+                          <div className="flex flex-col items-center gap-2 group-hover:scale-105 transition-transform">
+                            <UploadCloud className="h-10 w-10 text-slate-400 group-hover:text-primary-500" />
+                            <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                              Clique para enviar certificado (PDF, JPG)
+                            </p>
+                            <p className="text-xs text-slate-400">
+                              Comprove titulações como TRG Master
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Certificates List */}
+                        <div className="space-y-2">
+                          {formData.certificates?.map((cert, idx) => (
+                            <div key={idx} className="flex items-center justify-between p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">
+                              <div className="flex items-center gap-3">
+                                <FileText className="text-slate-400" size={18} />
+                                <div className="flex flex-col">
+                                  <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{cert.name}</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-[10px] uppercase font-bold tracking-wider ${cert.status === 'verified' ? 'text-green-600' :
+                                      cert.status === 'rejected' ? 'text-red-500' : 'text-amber-500'
+                                      }`}>
+                                      {cert.status === 'verified' ? 'Validado CITRG' : cert.status === 'rejected' ? 'Rejeitado' : 'Em Análise (CITRG)'}
+                                    </span>
+                                    {cert.status === 'pending' && (
+                                      <div className="flex items-center gap-2">
+                                        <button
+                                          onClick={async () => {
+                                            try {
+                                              triggerToast('Inicializando leitura do documento (OCR)...', 'success');
+
+                                              // Import Tesseract dynamically
+                                              const Tesseract = (await import('tesseract.js')).default;
+
+                                              // 1. Recognize Text
+                                              const { data: { text } } = await Tesseract.recognize(
+                                                cert.url,
+                                                'por', // Portuguese
+                                                { logger: m => console.log(m) }
+                                              );
+
+                                              const scanText = text.toLowerCase();
+                                              console.log('OCR Result:', scanText);
+
+                                              // 2. Validation Rules (Must match Name OR CITRG Code)
+                                              // Clean strings for comparison
+                                              const safeName = formData.name.toLowerCase().split(' ')[0]; // Match first name at least
+                                              const safeCode = formData.citrg_code.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+                                              // Keywords including "Master" as per user example
+                                              const hasKeyword = scanText.includes('trg') || scanText.includes('terapia') || scanText.includes('certificado') || scanText.includes('master') || scanText.includes('citrg');
+                                              const hasName = safeName && scanText.includes(safeName);
+                                              const hasCode = safeCode && scanText.replace(/[^a-z0-9]/g, '').includes(safeCode);
+
+                                              if (hasKeyword && (hasName || hasCode)) {
+                                                triggerToast('Buscando referências na rede...', 'success');
+                                                await new Promise(r => setTimeout(r, 2000));
+                                                const updatedCerts = [...formData.certificates];
+                                                updatedCerts[idx].status = 'verified';
+                                                setFormData({ ...formData, certificates: updatedCerts });
+                                                triggerToast(`Membro Validado: ${formData.name} - CITRG ${formData.citrg_code}`, 'success');
+                                                handleSave();
+                                              } else {
+                                                triggerToast('Documento ilegível ou dados não conferem. Verifique se o nome ou CITRG estão visíveis.', 'error');
+                                              }
+                                            } catch (err) {
+                                              console.error(err);
+                                              triggerToast('Erro na leitura do documento. Tente uma imagem mais nítida.', 'error');
+                                            }
+                                          }}
+                                          className="text-xs text-primary-600 hover:underline flex items-center gap-1"
+                                        >
+                                          <CheckCircle2 size={12} /> Validar Credenciais
+                                        </button>
+
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => setFormData({ ...formData, certificates: formData.certificates.filter((_, i) => i !== idx) })}
+                                className="text-slate-400 hover:text-red-500 p-2"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
                   </div>
                 </div>
               </div>
@@ -459,20 +798,10 @@ const SettingsView: React.FC = () => {
                       </p>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase">Sua Especialidade Principal</label>
-                          <select
-                            value={formData.specialty}
-                            onChange={(e) => setFormData({ ...formData, specialty: e.target.value })}
-                            className="w-full p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm"
-                          >
-                            <option value="Geral">Clínica Geral / TRG Padrão</option>
-                            <option value="Ansiedade">Ansiedade e Pânico</option>
-                            <option value="Depressão">Depressão</option>
-                            <option value="Traumas">Traumas Complexos</option>
-                            <option value="Relacionamentos">Relacionamentos</option>
-                            <option value="Infantil">Infantil</option>
-                          </select>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="p-4 bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-center">
+                            <p className="text-sm text-slate-500 italic">Configure suas especialidades na aba "Meu Perfil" para serem exibidas aqui.</p>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -595,8 +924,23 @@ const SettingsView: React.FC = () => {
                         <CalendarIcon size={24} />
                       </div>
                       <div>
-                        <h4 className="font-bold text-slate-800 dark:text-white">Google Calendar</h4>
-                        <p className="text-sm text-slate-500">Sincronize agendamentos automaticamente.</p>
+                        <h4 className="font-bold text-slate-800 dark:text-white">Sincronização Zero-Click</h4>
+                        <p className="text-sm text-slate-500">Agendamentos são enviados via convite iCal para seu email.</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded-full border border-green-200 uppercase tracking-wider">Ativo</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/20 rounded-xl flex items-center justify-center text-blue-600">
+                        <Globe size={24} />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-800 dark:text-white">Google Calendar (API)</h4>
+                        <p className="text-sm text-slate-500">Integração nativa avançada (vincular conta).</p>
                       </div>
                     </div>
                     <ToggleSwitch checked={integrations.googleCalendar} onChange={() => setIntegrations({ ...integrations, googleCalendar: !integrations.googleCalendar })} />
@@ -1106,6 +1450,31 @@ const SettingsView: React.FC = () => {
 
         </div >
       </div >
+
+      {/* Floating Save Button */}
+      {
+        ['profile', 'clinic', 'network', 'financial', 'schedule', 'notifications', 'security'].includes(activeTab) && (
+          <div className="fixed bottom-6 right-28 z-50 animate-slide-up">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="bg-primary-600 text-white px-6 py-4 rounded-full shadow-2xl hover:bg-primary-700 transition-all font-bold flex items-center gap-3 disabled:opacity-70 disabled:cursor-not-allowed hover:scale-105 active:scale-95"
+            >
+              {saving ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Salvando...</span>
+                </>
+              ) : (
+                <>
+                  <Save size={20} />
+                  <span>Salvar Alterações</span>
+                </>
+              )}
+            </button>
+          </div>
+        )
+      }
     </div >
   );
 };

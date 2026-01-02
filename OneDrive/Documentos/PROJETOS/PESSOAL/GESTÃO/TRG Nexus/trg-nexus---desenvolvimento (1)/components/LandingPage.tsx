@@ -167,17 +167,24 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, isDarkMode, tog
             >
               Quero Testar Gratuitamente <ArrowRight size={20} />
             </button>
-            <button className="w-full sm:w-auto px-8 py-4 bg-slate-800/80 hover:bg-slate-700 text-white rounded-2xl font-bold text-lg border border-slate-600 transition-all flex items-center justify-center gap-2 group backdrop-blur-sm hover:border-slate-500">
+            <button
+              onClick={() => document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth' })}
+              className="w-full sm:w-auto px-8 py-4 bg-slate-800/80 hover:bg-slate-700 text-white rounded-2xl font-bold text-lg border border-slate-600 transition-all flex items-center justify-center gap-2 group backdrop-blur-sm hover:border-slate-500"
+            >
               <PlayCircle size={20} className="text-primary-400 group-hover:scale-110 transition-transform" />
               Ver Demonstração
             </button>
           </div>
 
-          {/* Mockup Visual */}
-          <div className="mt-24 relative max-w-6xl mx-auto group">
+          {/* Dashboard Preview */}
+          <div id="demo" className="mt-24 relative max-w-5xl mx-auto group animate-slide-up delay-200">
             <div className="absolute -inset-1 bg-gradient-to-r from-primary-500 to-secondary-600 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
-            <div className="relative bg-slate-900 border border-slate-700 rounded-2xl p-2 shadow-2xl shadow-black/50 overflow-hidden transform rotate-x-12 perspective-1000 ring-1 ring-white/10">
-              <img src="https://placehold.co/1200x700/1e293b/cbd5e1?text=Dashboard+TRG+Nexus+Preview" alt="Dashboard Preview" className="rounded-xl w-full opacity-100" />
+            <div className="relative bg-slate-900 border border-slate-700 rounded-2xl p-2 shadow-2xl shadow-black/50 overflow-hidden ring-1 ring-white/10">
+              <img
+                src="https://placehold.co/1200x700/1e293b/cbd5e1?text=Dashboard+TRG+Nexus+Preview"
+                alt="Plataforma TRG Nexus - Visão Geral"
+                className="rounded-xl w-full opacity-100 transform transition-transform duration-700 group-hover:scale-[1.01]"
+              />
             </div>
           </div>
         </div>

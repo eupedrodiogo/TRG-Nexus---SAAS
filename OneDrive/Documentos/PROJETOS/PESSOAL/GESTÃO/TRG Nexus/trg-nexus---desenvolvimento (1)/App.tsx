@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { Moon, Sun } from 'lucide-react';
+import { supabase } from './lib/supabase';
 
 // Components
 import BookingWizard from './components/PatientBooking/BookingWizard';
@@ -11,6 +12,7 @@ import LoginPage from './components/Auth/LoginPage';
 import RegisterPage from './components/Auth/RegisterPage';
 import TherapistDashboard from './components/TherapistDashboard/Dashboard';
 import LandingPage from './components/LandingPage';
+import InstallPrompt from './components/InstallPrompt';
 import PaymentSuccess from './components/PaymentSuccess';
 import ClientSessionView from './components/ClientSession/ClientSessionView';
 import { ClientProvider } from './components/ClientPortal/ClientContext';
@@ -41,13 +43,53 @@ const ProtectedRoute = () => {
   return <Outlet />;
 };
 
+// Capture recovery event that might fire before React mounts
+let isRecoveryFlow = false;
+supabase.auth.onAuthStateChange((event) => {
+  if (event === 'PASSWORD_RECOVERY') {
+    isRecoveryFlow = true;
+  }
+});
+
 function AppContent() {
   const { isDarkMode, toggleTheme } = useTheme();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // 1. Handle pre-mount recovery events
+    if (isRecoveryFlow) {
+      console.log('Pre-mount PASSWORD_RECOVERY detected, redirecting...');
+      isRecoveryFlow = false;
+      navigate('/update-password');
+    }
+
+    // 2. Listen for Supabase specific Password Recovery event (post-mount)
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        console.log('PASSWORD_RECOVERY event detected, redirecting to update-password');
+        navigate('/update-password');
+      }
+    });
+
+    // 3. Fallback check for raw hashes (errors or if event didn't fire yet)
+    // Check for recovery hash OR error hash from Supabase (defaults to root if redirect URL not whitelisted)
+    if (location.hash && (location.hash.includes('type=recovery') || location.hash.includes('error='))) {
+      console.log('Recovery or Error hash detected, redirecting to /update-password');
+      // Redirect to /update-password but PRESERVE the hash so Supabase can parse the token or error!
+      navigate(`/update-password${location.hash}`);
+    }
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, [location, navigate]);
 
   return (
     <div className={`min-h-screen transition-colors duration-300 ${isDarkMode ? 'dark' : ''}`}>
       {/* Theme Toggle - Floating Removed (Duplicate) */}
 
+      <InstallPrompt />
       <Routes>
         {/* Public Routes */}
         {/* Pass global theme context down to LandingPage if needed, or update LandingPage to use context too. For now passing props to maintain compatibility. */}

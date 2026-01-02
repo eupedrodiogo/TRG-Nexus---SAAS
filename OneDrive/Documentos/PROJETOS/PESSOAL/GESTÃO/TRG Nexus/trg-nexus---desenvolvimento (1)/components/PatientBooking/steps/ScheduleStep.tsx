@@ -27,7 +27,8 @@ const ScheduleStep: React.FC<ScheduleStepProps> = ({ data, onUpdate, onNext, onB
             try {
                 // Format date as YYYY-MM-DD for the API
                 const dateStr = selectedDate.toISOString().split('T')[0];
-                const response = await fetch(`/api/availability?date=${dateStr}`);
+                const therapistQuery = data.therapistId ? `&therapistId=${data.therapistId}` : '';
+                const response = await fetch(`/api/availability?date=${dateStr}${therapistQuery}`);
                 if (response.ok) {
                     const data = await response.json();
                     setAvailableSlots(data.slots);

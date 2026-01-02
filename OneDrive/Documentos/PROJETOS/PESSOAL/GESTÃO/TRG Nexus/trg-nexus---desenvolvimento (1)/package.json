@@ -24,6 +24,7 @@
     "clsx": "^2.1.1",
     "dotenv": "^17.2.3",
     "jsonwebtoken": "^9.0.2",
+    "jspdf": "^3.0.4",
     "lucide-react": "^0.554.0",
     "nodemailer": "^7.0.11",
     "peerjs": "^1.5.5",
@@ -36,7 +37,9 @@
     "recharts": "^3.4.1",
     "stripe": "^20.0.0",
     "tailwind-merge": "^3.4.0",
-    "twilio": "^5.10.7"
+    "tesseract.js": "^7.0.0",
+    "twilio": "^5.10.7",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
@@ -45,6 +48,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "vite-plugin-pwa": "^1.2.0"
   }
 }

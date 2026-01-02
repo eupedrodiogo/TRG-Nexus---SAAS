@@ -1,6 +1,7 @@
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { verifyAuth } from '../_utils/auth';
 
 // Initialize Gemini Client
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
@@ -28,10 +29,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+    res.setHeader(
+        'Access-Control-Allow-Headers',
+        'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization'
+    );
 
-    if (req.method === 'OPTIONS') return res.status(200).end();
-    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+    if (req.method === 'OPTIONS') {
+        res.status(200).end();
+        return;
+    }
+
+    if (req.method !== 'POST') {
+        return res.status(405).json({ error: 'Method Not Allowed' });
+    }
+
+    // 1. Verify Auth
+    const user = verifyAuth(req, res);
+    if (!user) return;
 
     try {
         const { messages, context } = req.body;
@@ -59,23 +73,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             prompt += `${msg.role === 'user' ? 'Terapeuta' : 'Nexus AI'}: ${msg.text}\n`;
         });
 
-        prompt += `\nNexus AI:`; // Trigger for completion
-
-        // Generate Content
         const result = await model.generateContent(prompt);
         const response = await result.response;
         const text = response.text();
 
-        return res.status(200).json({
-            reply: text,
-            success: true
-        });
+        return res.status(200).json({ reply: text });
 
     } catch (error: any) {
-        console.error('Gemini API Error:', error);
-        return res.status(500).json({
-            error: 'Erro ao processar sua solicitação.',
-            details: error.message
-        });
+        console.error('AI Chat Error:', error);
+        return res.status(500).json({ error: error.message || 'Erro interno na IA.' });
     }
 }

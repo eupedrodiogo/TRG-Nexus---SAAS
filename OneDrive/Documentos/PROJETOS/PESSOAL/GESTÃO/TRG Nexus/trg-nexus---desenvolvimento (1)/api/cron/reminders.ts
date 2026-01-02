@@ -7,12 +7,11 @@ const supabaseUrl = process.env.VITE_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-    // Authenticate Cron Request (Vercel automatically sets this header)
-    /* 
-    if (req.headers['authorization'] !== `Bearer ${process.env.CRON_SECRET}`) {
+    // Authenticate Cron Request
+    const authHeader = req.headers['authorization'];
+    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
         return res.status(401).end('Unauthorized');
     }
-    */
 
     if (!supabaseUrl || !supabaseServiceKey) {
         return res.status(500).json({ error: 'Missing Supabase Config' });

@@ -29,7 +29,8 @@ export interface Appointment {
 
 export interface BlockedTime {
   id: string;
-  dayOfWeek: number; // 0-6 (Sunday-Saturday) or -1 for specific dates (simplified to recurring weekly for now)
+  dayOfWeek?: number; // 0-6 (Sunday-Saturday) for recurring, can be undefined for specific dates
+  date?: string; // YYYY-MM-DD for specific date blocks
   startTime: string; // HH:MM
   endTime: string; // HH:MM
   label: string;

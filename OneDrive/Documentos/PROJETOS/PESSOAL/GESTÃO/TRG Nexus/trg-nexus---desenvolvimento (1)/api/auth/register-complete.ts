@@ -3,9 +3,51 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 import twilio from 'twilio';
-import { sendMetaWhatsApp } from '../_utils/notifications';
+// import { sendMetaWhatsApp } from '../_utils/notifications';
 
-// Helper function to generate email template (inlined for safety)
+// Inlined helper to avoid module import issues during debug
+async function sendMetaWhatsAppInlined(to: string, templateName: string, languageCode: string, components: any[] = []) {
+    try {
+        const token = process.env.META_WHATSAPP_TOKEN;
+        const phoneId = process.env.META_PHONE_ID;
+        if (!token || !phoneId) return { success: false, error: 'missing_credentials' };
+
+        let cleanPhone = to.replace(/\D/g, '');
+        if (!cleanPhone.startsWith('55') && cleanPhone.length <= 11) cleanPhone = '55' + cleanPhone;
+
+        const payload = {
+            messaging_product: "whatsapp",
+            to: cleanPhone,
+            type: "template",
+            template: {
+                name: templateName,
+                language: { code: languageCode },
+                components: components
+            }
+        };
+
+        // Using global fetch (Next.js/Node 18+ have it)
+        const response = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            console.error('Meta API Error:', errData);
+            return { success: false, error: errData };
+        }
+        return { success: true };
+    } catch (e) {
+        console.error('Local Meta Send Error:', e);
+        return { success: false, error: e };
+    }
+}
+
 const getEmailTemplate = (plan: string, name: string) => {
     const primaryColor = '#0f172a';
     const accentColor = '#3b82f6';
@@ -14,9 +56,8 @@ const getEmailTemplate = (plan: string, name: string) => {
 
     let title, subject, content;
 
-    // Simplified template logic for brevity - using the main one
     switch (plan) {
-        case 'price_1SZgFjKPo7EypB7V8hI35TpO': // Profissional
+        case 'price_1SZgFjKPo7EypB7V8hI35TpO':
         case 'price_1Sd8DXKPo7EypB7VZwytTUEP':
         case 'profissional':
         case 'pro':
@@ -44,7 +85,6 @@ const getEmailTemplate = (plan: string, name: string) => {
             `;
     }
 
-    // Fallback HTML structure
     return {
         subject,
         html: `
@@ -85,7 +125,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     try {
-        // 1. Initialize Supabase Admin
         const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
         const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
 
@@ -102,8 +141,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         const finalPhone = '+' + formattedPhone;
 
-        // --- DEBUG / UNBLOCKER LOGIC ---
-        // Force delete specific test users if they exist to allow fresh registration
+        // Force reset logic for test users (optional, keeping for backward compat)
         if (['pedrodiogo.suporte@gmail.com', 'resignificamulher@gmail.com', 'pedrodiogo.mello@gmail.com'].includes(email)) {
             console.log(`[Force Reset] Checking existence for test user: ${email}`);
             const { data: users, error: listError } = await supabaseAdmin.auth.admin.listUsers();
@@ -115,9 +153,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 }
             }
         }
-        // -------------------------------
 
-        // 2. Create User (Strict Mode)
+        // 2. Create User
         const { data: user, error: createError } = await supabaseAdmin.auth.admin.createUser({
             email,
             phone: finalPhone,
@@ -134,78 +171,94 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         console.log('User created successfully:', user.user.id);
 
-        // 3. Send Custom Email
+        // PARALLEL NOTIFICATION BLOCK
+        // Optimize execution time by running Email and WhatsApp concurrently
+        // This prevents Vercel Function Timeouts (500 Error) if one service hangs
+        console.log('Starting parallel notifications...');
+
+        const notificationPromises = [];
+
+        // 3. Email Promise
         const port = Number(process.env.SMTP_PORT) || 587;
         const host = (process.env.SMTP_HOST || '').trim();
         const smtpUser = (process.env.SMTP_USER || '').trim();
         const smtpPass = (process.env.SMTP_PASS || '').trim();
 
         if (host && smtpUser && smtpPass) {
-            try {
-                const transporter = nodemailer.createTransport({
-                    host: host,
-                    port,
-                    secure: port === 465,
-                    auth: {
-                        user: smtpUser,
-                        pass: smtpPass,
-                    },
-                });
-
-                const { subject, html } = getEmailTemplate(plan || 'pro', name);
-                await transporter.sendMail({
-                    from: `"TRG Nexus" <${process.env.SMTP_USER}>`,
-                    to: email,
-                    subject,
-                    html,
-                });
-            } catch (emailError: any) {
-                console.error("Email sending failed:", emailError);
-            }
+            notificationPromises.push((async () => {
+                try {
+                    const transporter = nodemailer.createTransport({
+                        host: host,
+                        port,
+                        secure: port === 465,
+                        auth: { user: smtpUser, pass: smtpPass },
+                    });
+                    const { subject, html } = getEmailTemplate(plan || 'pro', name);
+                    await transporter.sendMail({
+                        from: `"TRG Nexus" <${process.env.SMTP_USER}>`,
+                        to: email,
+                        subject,
+                        html,
+                    });
+                    console.log('Email sent successfully');
+                } catch (emailError: any) {
+                    console.error("Email sending failed:", emailError);
+                }
+            })());
         }
 
-        // 4. Send WhatsApp
-        try {
-            // Priority: Meta Cloud API (Official & Free Tier)
-            if (process.env.META_WHATSAPP_TOKEN && process.env.META_PHONE_ID) {
-                console.log('Sending WhatsApp via Meta Cloud API...');
-                // Uses 'hello_world' template for verified numbers in Dev Mode
-                const { success, error } = await sendMetaWhatsApp(finalPhone, 'hello_world', 'en_US');
-                if (!success) console.error('Meta Send Failed:', error);
-            }
-            // Legacy Fallback: Twilio
-            else {
-                const twilioSid = process.env.TWILIO_ACCOUNT_SID;
-                const twilioToken = process.env.TWILIO_AUTH_TOKEN;
-                const twilioFrom = process.env.TWILIO_PHONE_NUMBER;
+        // 4. WhatsApp Promise
+        notificationPromises.push((async () => {
+            try {
+                // Priority: Meta Cloud API (Official & Free Tier)
+                if (process.env.META_WHATSAPP_TOKEN && process.env.META_PHONE_ID) {
+                    console.log('Sending WhatsApp via Meta Cloud API...');
+                    const components = [{
+                        type: 'body',
+                        parameters: [{ type: 'text', text: name }]
+                    }];
+                    const { success, error } = await sendMetaWhatsAppInlined(finalPhone, 'welcome_trg_nexus', 'pt_BR', components);
+                    if (!success) console.error('Meta Send Failed:', error);
+                    else console.log('Meta WhatsApp sent successfully');
+                }
+                // Legacy Fallback: Twilio
+                else {
+                    const twilioSid = process.env.TWILIO_ACCOUNT_SID;
+                    const twilioToken = process.env.TWILIO_AUTH_TOKEN;
+                    const twilioFrom = process.env.TWILIO_PHONE_NUMBER;
 
-                if (twilioSid && twilioToken && twilioFrom) {
-                    const client = twilio(twilioSid, twilioToken);
-                    const templateSid = process.env.TWILIO_TEMPLATE_SID;
+                    if (twilioSid && twilioToken && twilioFrom) {
+                        const client = twilio(twilioSid, twilioToken);
+                        const templateSid = process.env.TWILIO_TEMPLATE_SID;
 
-                    if (templateSid) {
-                        console.log('Sending WhatsApp using Twilio Template:', templateSid);
-                        await client.messages.create({
-                            from: twilioFrom.startsWith('whatsapp:') ? twilioFrom : `whatsapp:${twilioFrom}`,
-                            to: `whatsapp:${finalPhone}`,
-                            contentSid: templateSid,
-                            contentVariables: JSON.stringify({
-                                "1": name,
-                                "2": "https://trg-nexus-saas.vercel.app/login"
-                            })
-                        });
-                    } else {
-                        await client.messages.create({
-                            from: twilioFrom.startsWith('whatsapp:') ? twilioFrom : `whatsapp:${twilioFrom}`,
-                            to: `whatsapp:${finalPhone}`,
-                            body: `🌟 *Bem-vindo(a) ao TRG Nexus!*\n\nOlá ${name}, seu cadastro foi realizado com sucesso! 🚀\n\nAcesse https://trg-nexus-saas.vercel.app/login e use seu email e senha para entrar.\n\n_Equipe TRG Nexus_`
-                        });
+                        if (templateSid) {
+                            console.log('Sending WhatsApp using Twilio Template:', templateSid);
+                            await client.messages.create({
+                                from: twilioFrom.startsWith('whatsapp:') ? twilioFrom : `whatsapp:${twilioFrom}`,
+                                to: `whatsapp:${finalPhone}`,
+                                contentSid: templateSid,
+                                contentVariables: JSON.stringify({
+                                    "1": name,
+                                    "2": "https://trg-nexus-saas.vercel.app/login"
+                                })
+                            });
+                        } else {
+                            await client.messages.create({
+                                from: twilioFrom.startsWith('whatsapp:') ? twilioFrom : `whatsapp:${twilioFrom}`,
+                                to: `whatsapp:${finalPhone}`,
+                                body: `🌟 *Bem-vindo(a) ao TRG Nexus!*\n\nOlá ${name}, seu cadastro foi realizado com sucesso! 🚀\n\nAcesse https://trg-nexus-saas.vercel.app/login e use seu email e senha para entrar.\n\n_Equipe TRG Nexus_`
+                            });
+                        }
                     }
                 }
+            } catch (waError) {
+                console.error('WhatsApp failed:', waError);
             }
-        } catch (waError) {
-            console.error('WhatsApp failed:', waError);
-        }
+        })());
+
+        // Await all notifications (best effort)
+        await Promise.allSettled(notificationPromises);
+        console.log('Notifications processed.');
 
         return res.status(200).json({ success: true, message: 'Registration complete' });
 

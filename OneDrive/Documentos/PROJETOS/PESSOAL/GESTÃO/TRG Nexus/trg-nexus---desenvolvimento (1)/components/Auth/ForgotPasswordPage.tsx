@@ -16,23 +16,26 @@ const ForgotPasswordPage: React.FC = () => {
         setIsLoading(true);
 
         try {
-            // Include redirects for better UX if needed, though Supabase default is good usually.
-            // Typically site_url/update-password or similar. 
-            // We'll trust Supabase configuration or providing explicit redirect.
-            const redirectUrl = `${window.location.origin}/update-password`;
-
-            const { error: authError } = await supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: redirectUrl,
+            // New Custom API call (Bypassing Supabase default emailer)
+            const response = await fetch('/api/auth/request-password-reset', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email,
+                    redirectUrl: `${window.location.origin}/update-password`
+                })
             });
 
-            if (authError) throw authError;
+            const data = await response.json();
 
-            setSuccessMessage('Se este e-mail estiver cadastrado, você receberá um link de recuperação em instantes.');
-            setEmail(''); // Clear for UX
+            if (!response.ok) {
+                throw new Error(data.error || 'Erro ao solicitar recuperação.');
+            }
+
+            setSuccessMessage('Se este e-mail estiver cadastrado, você receberá um link de recuperação em instantes (Verifique o SPAM).');
+            setEmail('');
 
         } catch (err: any) {
-            // Security: Don't reveal if email exists or not usually, 
-            // but for this MVP let's be standard. Supabase handles rate limits.
             setError(err.message);
         } finally {
             setIsLoading(false);

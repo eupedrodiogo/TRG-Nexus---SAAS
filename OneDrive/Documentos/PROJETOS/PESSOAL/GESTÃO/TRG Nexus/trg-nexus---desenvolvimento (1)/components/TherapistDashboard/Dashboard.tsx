@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import Sidebar from '../Sidebar';
@@ -21,7 +21,22 @@ import { useTheme } from '../../contexts/ThemeContext';
 
 const TherapistDashboard: React.FC = () => {
     const navigate = useNavigate();
-    const [currentView, setCurrentView] = useState<AppView>(AppView.DASHBOARD);
+    const [searchParams, setSearchParams] = useSearchParams();
+
+    const [currentView, setCurrentView] = useState<AppView>(() => {
+        const viewParam = searchParams.get('view');
+        // Check if the param is a valid AppView value
+        if (viewParam && Object.values(AppView).includes(viewParam as AppView)) {
+            return viewParam as AppView;
+        }
+        return AppView.DASHBOARD;
+    });
+
+    // Sync state to URL
+    useEffect(() => {
+        setSearchParams({ view: currentView });
+    }, [currentView, setSearchParams]);
+
     const [isMobileOpen, setIsMobileOpen] = useState(false);
     const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
     // const [isDarkMode, setIsDarkMode] = useState(false); // Managed by Context
@@ -125,9 +140,14 @@ const TherapistDashboard: React.FC = () => {
     };
 
     const handleLogout = async () => {
-        await supabase.auth.signOut();
-        localStorage.removeItem('therapist');
-        navigate('/login');
+        try {
+            await supabase.auth.signOut();
+        } catch (error) {
+            console.error('Error signing out:', error);
+        } finally {
+            localStorage.removeItem('therapist');
+            navigate('/login', { replace: true });
+        }
     };
 
     return (

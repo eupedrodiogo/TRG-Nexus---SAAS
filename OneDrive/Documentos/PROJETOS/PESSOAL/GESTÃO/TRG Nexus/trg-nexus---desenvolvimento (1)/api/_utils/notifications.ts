@@ -13,10 +13,72 @@ interface BookingNotificationData {
     location?: string;
 }
 
+// Helper to generate iCal content
+function generateIcsContent(data: BookingNotificationData): string {
+    const { name, date, time, therapistName, location, mainComplaint } = data;
+
+    // Attempt to parse date from DD/MM/YYYY or YYYY-MM-DD
+    let year, month, day;
+    if (date.includes('/')) {
+        const parts = date.split('/');
+        day = parts[0].padStart(2, '0');
+        month = parts[1].padStart(2, '0');
+        year = parts[2];
+    } else {
+        const parts = date.split('-');
+        year = parts[0];
+        month = parts[1].padStart(2, '0');
+        day = parts[2].padStart(2, '0');
+    }
+
+    // Parse time HH:mm
+    const timeParts = time.split(':');
+    const hours = timeParts[0].padStart(2, '0');
+    const mins = timeParts[1].padStart(2, '0');
+
+    const startDateTime = `${year}${month}${day}T${hours}${mins}00`;
+
+    // Calculate end time (assuming 60 mins session)
+    const startDate = new Date(`${year}-${month}-${day}T${hours}:${mins}:00`);
+    const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+    const endYear = endDate.getFullYear();
+    const endMonth = String(endDate.getMonth() + 1).padStart(2, '0');
+    const endDay = String(endDate.getDate()).padStart(2, '0');
+    const endHours = String(endDate.getHours()).padStart(2, '0');
+    const endMins = String(endDate.getMinutes()).padStart(2, '0');
+    const endDateTime = `${endYear}${endMonth}${endDay}T${endHours}${endMins}00`;
+
+    const now = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+    const uid = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}@trgnexus.com`;
+
+    return [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//TRG Nexus//NONSGML v1.0//EN',
+        'METHOD:REQUEST',
+        'BEGIN:VEVENT',
+        `UID:${uid}`,
+        `DTSTAMP:${now}`,
+        `DTSTART:${startDateTime}`,
+        `DTEND:${endDateTime}`,
+        `SUMMARY:Sessão TRG: ${name}`,
+        `DESCRIPTION:Sessão de TRG agendada com ${name}.\\n\\nQueixa: ${mainComplaint || 'Não informada'}`,
+        `LOCATION:${location || 'Sessão Online'}`,
+        'STATUS:CONFIRMED',
+        'SEQUENCE:0',
+        'BEGIN:VALARM',
+        'TRIGGER:-PT15M',
+        'ACTION:DISPLAY',
+        'DESCRIPTION:Lembrete de Sessão TRG',
+        'END:VALARM',
+        'END:VEVENT',
+        'END:VCALENDAR'
+    ].join('\r\n');
+}
+
 export async function sendBookingNotification(data: BookingNotificationData) {
     console.log('Preparing to send notifications for:', data.email);
     let result = { status: 'pending', error: null, info: null };
-
 
     // 1. Email Notification - Setup Transporter
     try {
@@ -38,9 +100,6 @@ export async function sendBookingNotification(data: BookingNotificationData) {
                     pass: pass,
                 },
             });
-
-            // Verify connection (optional, but good for debugging logs)
-            // await transporter.verify(); 
 
             // Send Client Email
             const mailOptions = {
@@ -79,13 +138,14 @@ export async function sendBookingNotification(data: BookingNotificationData) {
                 `
             };
 
-            const info = await transporter.sendMail(mailOptions);
-            console.log('Client Email sent:', info.messageId);
+            const clientInfo = await transporter.sendMail(mailOptions);
+            console.log('Client Email sent:', clientInfo.messageId);
             result.status = 'sent';
-            result.info = info as any;
+            result.info = clientInfo as any;
 
-            // Send Therapist Email (Reuse transporter)
+            // Send Therapist Email (with iCal Invite)
             if (data.therapistEmail) {
+                const icsContent = generateIcsContent(data);
                 const therapistHtml = `
                     <!DOCTYPE html>
                     <html>
@@ -110,6 +170,10 @@ export async function sendBookingNotification(data: BookingNotificationData) {
                                     <p style="margin: 0;"><strong>Queixa:</strong> ${data.mainComplaint || 'Não informada'}</p>
                                 </div>
 
+                                <p style="font-size: 14px; color: #64748b; font-style: italic; margin-top: 16px;">
+                                    💡 Este evento foi sincronizado automaticamente com seu calendário (anexo .ics).
+                                </p>
+
                                 <div style="text-align: center; margin-top: 32px;">
                                     <a href="https://trg-nexus.vercel.app/dashboard" style="background-color: #3b82f6; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600;">
                                         Ver na Minha Agenda
@@ -125,9 +189,14 @@ export async function sendBookingNotification(data: BookingNotificationData) {
                     from: '"TRG Nexus System" <noreply@trgnexus.com>',
                     to: data.therapistEmail,
                     subject: `📅 Novo Agendamento: ${data.name}`,
-                    html: therapistHtml
+                    html: therapistHtml,
+                    icalEvent: {
+                        filename: 'sessao-trg.ics',
+                        method: 'REQUEST',
+                        content: icsContent
+                    }
                 });
-                console.log('Therapist email sent.');
+                console.log('Therapist email sent with iCal invite.');
             }
         }
     } catch (error: any) {

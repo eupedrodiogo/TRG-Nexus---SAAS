@@ -39,8 +39,10 @@ import {
 } from 'recharts';
 import { Patient } from '../types';
 import { MOCK_PATIENTS } from '../constants';
+import { api } from '../services/api';
 import RecordingGallery from './Shared/RecordingGallery';
 import AddSUDModal from './AddSUDModal';
+import WhatsAppModal from './WhatsAppModal';
 
 interface PatientsListProps {
   highlightPatientId?: string | null;
@@ -94,6 +96,10 @@ const ClientsList: React.FC<PatientsListProps> = ({ highlightPatientId, onNaviga
   const [sudHistory, setSudHistory] = useState<any[]>([]);
   const [isSUDModalOpen, setIsSUDModalOpen] = useState(false);
   const [addingSUD, setAddingSUD] = useState(false);
+
+  // WhatsApp Modal State
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
+  const [whatsAppTarget, setWhatsAppTarget] = useState<Patient | null>(null);
 
   useEffect(() => {
     if (viewingClient) {
@@ -208,9 +214,15 @@ const ClientsList: React.FC<PatientsListProps> = ({ highlightPatientId, onNaviga
     return matchesSearch && matchesFilter;
   });
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (window.confirm('Tem certeza que deseja arquivar este cliente?')) {
-      setPatients(prev => prev.filter(p => p.id !== id));
+      try {
+        await api.patients.delete(id);
+        setPatients(prev => prev.filter(p => p.id !== id));
+      } catch (error) {
+        console.error('Error deleting patient:', error);
+        alert('Erro ao excluir cliente. Tente novamente.');
+      }
     }
     setContextMenu({ ...contextMenu, visible: false });
   };
@@ -224,10 +236,18 @@ const ClientsList: React.FC<PatientsListProps> = ({ highlightPatientId, onNaviga
     setContextMenu({ ...contextMenu, visible: false });
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (editingClient && editForm) {
-      setPatients(prev => prev.map(p => p.id === editingClient.id ? { ...p, ...editForm } as Patient : p));
-      setEditingClient(null);
+      try {
+        const updated = await api.patients.update(editingClient.id, editForm);
+        if (updated) {
+          setPatients(prev => prev.map(p => p.id === editingClient.id ? updated : p));
+          setEditingClient(null);
+        }
+      } catch (error) {
+        console.error('Error updating patient:', error);
+        alert('Erro ao atualizar cliente.');
+      }
     }
   };
 
@@ -240,9 +260,9 @@ const ClientsList: React.FC<PatientsListProps> = ({ highlightPatientId, onNaviga
     setContextMenu({ ...contextMenu, visible: false });
   };
 
-  const handleWhatsApp = (phone: string) => {
-    const cleanPhone = phone.replace(/\D/g, '');
-    window.open(`https://wa.me/55${cleanPhone}?text=Olá, gostaria de falar sobre seu agendamento.`, '_blank');
+  const handleWhatsApp = (patient: Patient) => {
+    setWhatsAppTarget(patient);
+    setIsWhatsAppModalOpen(true);
   };
 
   const handleGenerateDocument = () => {
@@ -260,54 +280,14 @@ const ClientsList: React.FC<PatientsListProps> = ({ highlightPatientId, onNaviga
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
-
-    const filesArray = Array.from(files);
-
-    filesArray.forEach((file: any) => {
-      const uploadId = Math.random().toString(36).substring(7);
-      const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
-      const sizeDisplay = `${sizeMB} MB`;
-
-      // Add to uploading state
-      setUploadingFiles(prev => [...prev, {
-        id: uploadId,
-        name: file.name,
-        progress: 0,
-        size: sizeDisplay
-      }]);
-
-      // Simulate Upload Process
-      let progress = 0;
-      const interval = setInterval(() => {
-        progress += Math.floor(Math.random() * 15) + 5;
-
-        if (progress >= 100) {
-          progress = 100;
-          clearInterval(interval);
-
-          // Move to completed documents after brief delay
-          setTimeout(() => {
-            setUploadingFiles(prev => prev.filter(u => u.id !== uploadId));
-            setDocuments(prev => [{
-              id: Date.now() + Math.random(),
-              name: file.name,
-              date: new Date().toLocaleDateString('pt-BR'),
-              size: sizeDisplay,
-              type: file.name.split('.').pop() || 'file'
-            }, ...prev]);
-          }, 500);
-        }
-
-        setUploadingFiles(prev => prev.map(u =>
-          u.id === uploadId ? { ...u, progress } : u
-        ));
-      }, 200);
-    });
-
-    // Reset input
+    alert('Upload de documentos: Funcionalidade em desenvolvimento (Vercel Blob).');
     if (fileInputRef.current) fileInputRef.current.value = '';
+    return;
+    /* 
+    // Previous Simulation Logic commented out
+    const files = event.target.files; 
+    ... 
+    */
   };
 
   const getFileIcon = (fileName: string) => {
@@ -441,7 +421,7 @@ const ClientsList: React.FC<PatientsListProps> = ({ highlightPatientId, onNaviga
                   <div className="flex items-center gap-1 md:hidden">
                     <button
                       className="p-2 text-green-600 dark:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-full"
-                      onClick={(e) => { e.stopPropagation(); handleWhatsApp(client.phone); }}
+                      onClick={(e) => { e.stopPropagation(); handleWhatsApp(client); }}
                     >
                       <MessageCircle size={20} />
                     </button>
@@ -504,7 +484,7 @@ const ClientsList: React.FC<PatientsListProps> = ({ highlightPatientId, onNaviga
                   <DollarSign size={18} />
                 </button>
                 <button
-                  onClick={(e) => { e.stopPropagation(); handleWhatsApp(client.phone); }}
+                  onClick={(e) => { e.stopPropagation(); handleWhatsApp(client); }}
                   className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-green-600 hover:border-green-200 dark:hover:border-green-700 hover:bg-green-50 dark:hover:bg-slate-800 transition-colors"
                   title="WhatsApp"
                 >
@@ -719,6 +699,12 @@ const ClientsList: React.FC<PatientsListProps> = ({ highlightPatientId, onNaviga
                             <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{viewingClient.phone}</p>
                           </div>
                         </div>
+                        <button
+                          onClick={() => handleWhatsApp(viewingClient)}
+                          className="w-full flex items-center justify-center gap-2 py-2 bg-[#25D366]/10 text-[#075E54] dark:text-[#25D366] hover:bg-[#25D366]/20 rounded-lg text-sm font-bold transition-colors"
+                        >
+                          <MessageCircle size={16} /> Enviar Mensagem
+                        </button>
                       </div>
                     </div>
 
@@ -1116,6 +1102,15 @@ const ClientsList: React.FC<PatientsListProps> = ({ highlightPatientId, onNaviga
         onSave={handleSaveSUD}
         loading={addingSUD}
       />
+
+      {whatsAppTarget && (
+        <WhatsAppModal
+          isOpen={isWhatsAppModalOpen}
+          onClose={() => setIsWhatsAppModalOpen(false)}
+          patient={whatsAppTarget}
+          therapistName={JSON.parse(localStorage.getItem('therapist') || '{}').name || 'Especialista'}
+        />
+      )}
 
     </div>
   );

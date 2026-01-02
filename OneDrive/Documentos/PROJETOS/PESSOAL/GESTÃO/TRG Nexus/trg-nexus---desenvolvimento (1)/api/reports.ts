@@ -1,6 +1,7 @@
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import pg from 'pg';
+import { verifyAuth } from './_utils/auth';
 
 const { Pool } = pg;
 
@@ -14,23 +15,24 @@ const pool = new Pool({
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+    // 1. Verify Auth First
+    const user = verifyAuth(req, res);
+    if (!user) return; // verifyAuth handles the error response
+
     const client = await pool.connect();
 
     try {
         if (req.method === 'GET') {
-            const { therapistId, patientId } = req.query;
+            const { patientId } = req.query;
 
-            if (!therapistId) {
-                return res.status(400).json({ error: 'Missing therapistId' });
-            }
-
+            // FORCE filtering by the logged-in therapist
             let query = `
                 SELECT r.*, p.name as patient_name 
                 FROM reports r
                 LEFT JOIN patients p ON r.patient_id = p.id
                 WHERE r.therapist_id = $1
             `;
-            const params: any[] = [therapistId];
+            const params: any[] = [user.id];
 
             if (patientId) {
                 query += ` AND r.patient_id = $2`;
@@ -44,39 +46,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         if (req.method === 'POST') {
-            const { therapistId, patientId, title, type, content, metadata } = req.body;
+            const { patientId, title, type, content, metadata } = req.body;
 
-            if (!therapistId || !patientId || !title || !content) {
+            if (!patientId || !title || !content) {
                 return res.status(400).json({ error: 'Missing required fields' });
             }
 
-            // If patientId is 'demo', we don't save or we mock it?
-            // User might want to save demo reports too, but we need a valid UUID for FK.
-            // For now, if patientId is 'demo', we return success without saving (mock persistence).
-            if (patientId === 'demo') {
-                return res.status(200).json({
-                    id: 'demo-report-id',
-                    title,
-                    created_at: new Date().toISOString()
-                });
-            }
-
+            // Persistence
             const query = `
                 INSERT INTO reports (therapist_id, patient_id, title, type, content, metadata)
                 VALUES ($1, $2, $3, $4, $5, $6)
                 RETURNING *
             `;
 
-            const values = [
-                therapistId,
+            const result = await client.query(query, [
+                user.id, // Force ID from token
                 patientId,
                 title,
                 type || 'evolution',
                 content,
                 metadata || {}
-            ];
+            ]);
 
-            const result = await client.query(query, values);
             return res.status(201).json(result.rows[0]);
         }
 
@@ -86,7 +77,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 return res.status(400).json({ error: 'Missing report ID' });
             }
 
-            await client.query('DELETE FROM reports WHERE id = $1', [id]);
+            // Strict Delete: Must belong to therapist
+            const { rowCount } = await client.query('DELETE FROM reports WHERE id = $1 AND therapist_id = $2', [id, user.id]);
+
+            if (rowCount === 0) {
+                return res.status(404).json({ error: 'Report not found or unauthorized' });
+            }
+
             return res.status(200).json({ success: true });
         }
 

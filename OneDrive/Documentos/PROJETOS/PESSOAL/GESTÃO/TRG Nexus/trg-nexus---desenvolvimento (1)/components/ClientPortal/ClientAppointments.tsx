@@ -2,6 +2,7 @@ import React from 'react';
 import ClientLayout from './ClientLayout';
 import { Calendar, Clock, Video, CheckCircle, XCircle } from 'lucide-react';
 import { useClientData } from './ClientContext';
+import { AddToCalendar } from '../AddToCalendar';
 
 const ClientAppointments: React.FC = () => {
     const { appointments, patient } = useClientData();
@@ -69,11 +70,21 @@ const ClientAppointments: React.FC = () => {
                                                 )}
                                             </td>
                                             <td className="px-6 py-4 text-right">
-                                                {appt.status === 'Agendado' && (
-                                                    <a href={`/sessao-cliente/${appt.id}`} className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-xs font-bold transition-colors">
-                                                        <Video size={14} /> Entrar
-                                                    </a>
-                                                )}
+                                                <div className="flex items-center justify-end gap-2">
+                                                    {appt.status === 'Agendado' && (
+                                                        <>
+                                                            <AddToCalendar
+                                                                title={`Sessão TRG: ${patient?.therapist_name || 'Terapeuta'}`}
+                                                                date={appt.date}
+                                                                time={appt.time}
+                                                                description="Sessão de TRG agendada via TRG Nexus."
+                                                            />
+                                                            <a href={`/sessao-cliente/${appt.id}`} className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-xs font-bold transition-colors">
+                                                                <Video size={14} /> Entrar
+                                                            </a>
+                                                        </>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     ))
