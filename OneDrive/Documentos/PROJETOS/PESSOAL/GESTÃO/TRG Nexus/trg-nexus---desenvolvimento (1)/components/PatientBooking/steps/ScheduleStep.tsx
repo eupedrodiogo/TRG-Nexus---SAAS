@@ -99,23 +99,54 @@ const ScheduleStep: React.FC<ScheduleStepProps> = ({ data, onUpdate, onNext, onB
                         ))}
                     </div>
                     <div className="grid grid-cols-7 gap-2">
-                        {Array.from({ length: 31 }, (_, i) => (
-                            <button
-                                key={i}
-                                className={`aspect-square rounded-lg flex items-center justify-center text-sm font-medium transition-all
-                  ${i + 1 === selectedDate.getDate()
-                                        ? 'bg-primary-600 text-white shadow-lg shadow-primary-500/30'
-                                        : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
-                                    }`}
-                                onClick={() => {
-                                    const newDate = new Date(selectedDate);
-                                    newDate.setDate(i + 1);
-                                    setSelectedDate(newDate);
-                                }}
-                            >
-                                {i + 1}
-                            </button>
-                        ))}
+                        {(() => {
+                            const year = selectedDate.getFullYear();
+                            const month = selectedDate.getMonth();
+
+                            // Get days in month
+                            const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+                            // Get starting weekday of the month (0 = Sunday, 1 = Monday, etc.)
+                            const firstDayOfMonth = new Date(year, month, 1).getDay();
+
+                            // Create array for empty slots
+                            const emptySlots = Array.from({ length: firstDayOfMonth }, (_, i) => (
+                                <div key={`empty-${i}`} />
+                            ));
+
+                            // Create array for days
+                            const days = Array.from({ length: daysInMonth }, (_, i) => {
+                                const day = i + 1;
+                                const isSelected = day === selectedDate.getDate();
+                                const isToday = new Date().toDateString() === new Date(year, month, day).toDateString();
+                                const isPast = new Date(year, month, day) < new Date(new Date().setHours(0, 0, 0, 0));
+
+                                return (
+                                    <button
+                                        key={day}
+                                        disabled={isPast}
+                                        className={`aspect-square rounded-lg flex items-center justify-center text-sm font-medium transition-all
+                                            ${isSelected
+                                                ? 'bg-primary-600 text-white shadow-lg shadow-primary-500/30'
+                                                : isPast
+                                                    ? 'text-slate-300 dark:text-slate-600 cursor-not-allowed'
+                                                    : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                                            }
+                                            ${isToday && !isSelected ? 'ring-2 ring-primary-500/50' : ''}
+                                        `}
+                                        onClick={() => {
+                                            const newDate = new Date(selectedDate);
+                                            newDate.setDate(day);
+                                            setSelectedDate(newDate);
+                                        }}
+                                    >
+                                        {day}
+                                    </button>
+                                );
+                            });
+
+                            return [...emptySlots, ...days];
+                        })()}
                     </div>
                 </div>
 
@@ -189,7 +220,7 @@ const ScheduleStep: React.FC<ScheduleStepProps> = ({ data, onUpdate, onNext, onB
                     disabled={!data.date || !data.time}
                     className="flex-1 py-4 bg-primary-600 hover:bg-primary-500 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-lg shadow-primary-500/20 transition-all active:scale-95"
                 >
-                    Ir para Pagamento
+                    Cadastro/Anamnese
                 </button>
             </div>
 

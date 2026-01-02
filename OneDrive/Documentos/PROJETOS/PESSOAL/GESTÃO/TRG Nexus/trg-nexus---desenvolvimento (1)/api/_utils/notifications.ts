@@ -205,76 +205,87 @@ export async function sendBookingNotification(data: BookingNotificationData) {
         result.error = error.message || error;
     }
 
-    // 2. WhatsApp Notification (Twilio)
+    // 2. WhatsApp Notification (Meta WhatsApp API)
     try {
-        const twilioSid = (process.env.TWILIO_ACCOUNT_SID || '').trim();
-        const twilioToken = (process.env.TWILIO_AUTH_TOKEN || '').trim();
-        const twilioFrom = (process.env.TWILIO_PHONE_NUMBER || '').trim();
+        const { therapistPhone, name, date, time, therapistName, mainComplaint } = data as any;
 
-        if (twilioSid && twilioToken && twilioFrom) {
-            const client = twilio(twilioSid, twilioToken);
-            const { isReminder, type, therapistPhone } = data as any; // Extended properties
-
-            // Helper to format phone
-            const formatPhone = (p: string) => {
-                let cleaned = p.replace(/\D/g, '');
-                if (!cleaned.startsWith('55') && cleaned.length <= 11) cleaned = '55' + cleaned;
-                return `whatsapp:+${cleaned}`;
-            };
-
-            const messagesToSend = [];
-
-            // A. Patient Message
-            if (data.phone) {
-                let body = '';
-                if (type === 'referral_offer') {
-                    // Patient doesn't get referral offer, only Target Therapist does.
-                } else if (isReminder) {
-                    body = `🔔 *Lembrete TRG Nexus*\n\nOlá ${data.name}, passando para lembrar da sua consulta amanhã!\n\n📅 ${data.date} às ${data.time}\n👨‍⚕️ ${data.therapistName || 'Especialista TRG'}`;
-                } else {
-                    body = `✅ *Agendamento Confirmado*\n\nOlá ${data.name}, seu agendamento na TRG Nexus está confirmado!\n\n📅 ${data.date} às ${data.time}\n👨‍⚕️ ${data.therapistName || 'Especialista TRG'}\n\nRecomendamos entrar 5 minutos antes.`;
+        // A. Client Message
+        if (data.phone) {
+            // Template: notificacao_sessao_cliente
+            // Components: {{1}} clientName, {{2}} therapistName, {{3}} date, {{4}} time
+            await sendMetaWhatsApp(data.phone, 'notificacao_sessao_cliente', 'pt_BR', [
+                {
+                    type: 'body', parameters: [
+                        { type: 'text', text: name },
+                        { type: 'text', text: therapistName || 'Terapeuta TRG' },
+                        { type: 'text', text: date },
+                        { type: 'text', text: time }
+                    ]
                 }
-
-                if (body) {
-                    messagesToSend.push({ to: formatPhone(data.phone), body });
-                }
-            }
-
-            // B. Therapist Message (New Feature)
-            // If it's a booking, notify the therapist. If it's a referral offer, satisfy that too.
-            if (therapistPhone) {
-                let tBody = '';
-                if (type === 'referral_offer') {
-                    tBody = `🚀 *Oportunidade de Transbordo*\n\nVocê tem uma nova indicação disponível!\n\nNome: ${data.name}\nValor: R$ ${data.mainComplaint || '0,00'}\n\nAcesse o painel para aceitar.`;
-                } else if (!isReminder) {
-                    // Default Booking Notification for Therapist
-                    tBody = `📅 *Novo Agendamento*\n\nPaciente: ${data.name}\nData: ${data.date} - ${data.time}\n\nVerifique sua agenda no TRG Nexus.`;
-                }
-
-                if (tBody) {
-                    messagesToSend.push({ to: formatPhone(therapistPhone), body: tBody });
-                }
-            }
-
-            // Send All Messages
-            for (const msg of messagesToSend) {
-                console.log(`Sending WhatsApp to ${msg.to}...`);
-                await client.messages.create({
-                    from: twilioFrom,
-                    to: msg.to,
-                    body: msg.body
-                });
-            }
-
-            result.status = 'sent_whatsapp_multiple';
-        } else {
-            console.log('Twilio credentials missing. Skipping WhatsApp.');
+            ]);
         }
-    } catch (error: any) {
-        console.error('Error sending WhatsApp (Twilio):', error);
-    }
 
-    return result;
+        // B. Therapist Message
+        if (therapistPhone) {
+            // Template: confirmacao_agendamento
+            // Components: {{1}} therapistName, {{2}} patientName, {{3}} date, {{4}} time
+            // Note: Per manual.ts, valid template is 'confirmacao_agendamento' 
+            // for "BOOKING_CONFIRMATION" which likely is reused here for the therapist notification.
+            await sendMetaWhatsApp(therapistPhone, 'confirmacao_agendamento', 'pt_BR', [
+                {
+                    type: 'body', parameters: [
+                        { type: 'text', text: therapistName || 'Terapeuta' },
+                        { type: 'text', text: name },
+                        { type: 'text', text: date },
+                        { type: 'text', text: time }
+                    ]
+                }
+            ]);
+        }
+
+        result.status = 'sent_meta_whatsapp';
+
+    } catch (error: any) {
+        console.error('Error sending WhatsApp (Meta):', error);
+        result.status = 'error_meta';
+        result.error = error;
+    }
+}
+
+export async function sendBookingCancellation(data: { name: string, email: string, phone: string, date: string, time: string, therapistName?: string }) {
+    console.log('[Notification] Sending Cancellation to:', data.email);
+
+    // 1. WhatsApp Cancellation
+    if (data.phone) {
+        // Template: cancelamento_agendamento
+        // Parameters: {{1}} recipientName, {{2}} date, {{3}} time
+        await sendMetaWhatsApp(data.phone, 'cancelamento_agendamento', 'pt_BR', [
+            {
+                type: 'body', parameters: [
+                    { type: 'text', text: data.name },
+                    { type: 'text', text: data.date },
+                    { type: 'text', text: data.time }
+                ]
+            }
+        ]);
+    }
+    // TODO: Add Email Cancellation (Optional for now)
+}
+
+export async function sendSessionReminder(data: { name: string, phone: string, date: string, time: string }) {
+    console.log('[Notification] Sending Reminder to:', data.name);
+
+    if (data.phone) {
+        // Template: lembrete_sessao_15min_v2
+        // Parameters: {{1}} patientName
+        await sendMetaWhatsApp(data.phone, 'lembrete_sessao_15min_v2', 'pt_BR', [
+            {
+                type: 'body', parameters: [
+                    { type: 'text', text: data.name }
+                ]
+            }
+        ]);
+    }
 }
 
 export async function sendMetaWhatsApp(to: string, templateName: string, languageCode: string = 'pt_BR', components: any[] = []) {

@@ -101,7 +101,7 @@ function AppContent() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/agendar" element={<BookingWizard />} />
         <Route path="/agendar/:step" element={<BookingWizard />} />
-        <Route path="/paciente/:id" element={<PatientLandingPage isDarkMode={isDarkMode} toggleTheme={toggleTheme} />} />
+        <Route path="/cliente" element={<PatientLandingPage isDarkMode={isDarkMode} toggleTheme={toggleTheme} />} />
 
         {/* System Test Tool */}
         <Route path="/system-test" element={<SystemTest />} />

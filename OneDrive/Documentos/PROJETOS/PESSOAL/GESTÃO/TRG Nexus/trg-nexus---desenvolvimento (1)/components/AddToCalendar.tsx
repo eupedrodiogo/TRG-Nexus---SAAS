@@ -30,7 +30,12 @@ export const AddToCalendar: React.FC<AddToCalendarProps> = ({
     // Parse date for URLs
     const parseDate = () => {
         let year, month, day;
-        if (date.includes('/')) {
+        if (date.includes('T')) {
+            const d = new Date(date);
+            year = d.getFullYear();
+            month = String(d.getMonth() + 1).padStart(2, '0');
+            day = String(d.getDate()).padStart(2, '0');
+        } else if (date.includes('/')) {
             const parts = date.split('/');
             day = parts[0].padStart(2, '0');
             month = parts[1].padStart(2, '0');
@@ -39,7 +44,7 @@ export const AddToCalendar: React.FC<AddToCalendarProps> = ({
             const parts = date.split('-');
             year = parts[0];
             month = parts[1].padStart(2, '0');
-            day = parts[2].padStart(2, '0');
+            day = parts[2].split('T')[0].padStart(2, '0'); // Safety split
         }
         const timeParts = time.split(':');
         const hh = timeParts[0].padStart(2, '0');

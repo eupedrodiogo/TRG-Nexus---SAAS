@@ -59,7 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         const { data: therapistData } = await supabase
             .from('therapists')
-            .select('email, name')
+            .select('email, name, phone')
             .eq('id', therapistId)
             .single();
 
@@ -71,6 +71,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             time,
             therapistName: therapistData?.name || 'Terapeuta TRG',
             therapistEmail: therapistData?.email,
+            therapistPhone: therapistData?.phone, // Add phone for WhatsApp
             mainComplaint: anamnesisData.queixaPrincipal,
             location: 'Sessão Online'
         };

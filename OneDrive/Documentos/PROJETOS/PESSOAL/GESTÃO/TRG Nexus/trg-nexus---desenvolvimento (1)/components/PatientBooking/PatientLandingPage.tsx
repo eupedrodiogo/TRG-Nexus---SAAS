@@ -47,7 +47,7 @@ const PatientLandingPage: React.FC<PatientLandingPageProps> = ({ isDarkMode, tog
                             onClick={handleBooking}
                             className="px-6 py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-full transition-all shadow-lg shadow-primary-500/20 active:scale-95 hidden md:block"
                         >
-                            Agendar Consulta
+                            Agendar Sessão
                         </button>
                     </div>
                 </div>

@@ -1,5 +1,6 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import pg from 'pg';
+import { sendBookingCancellation } from './_utils/notifications';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { Pool } = pg;
@@ -28,6 +29,61 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     'UPDATE appointments SET date=$1, time=$2, status=$3, type=$4, notes=$5 WHERE id=$6 RETURNING *',
                     [date, time, status, type, notes, id]
                 );
+
+                // Notification: Booking Cancellation
+                if (status === 'Cancelado' && rows.length > 0) {
+                    try {
+                        const { rows: details } = await client.query(`
+                            SELECT 
+                                p.name as patient_name, 
+                                p.email as patient_email, 
+                                p.phone as patient_phone,
+                                t.name as therapist_name,
+                                t.email as therapist_email,
+                                t.phone as therapist_phone,
+                                a.date, a.time
+                            FROM appointments a
+                            JOIN patients p ON a.patient_id = p.id
+                            LEFT JOIN therapists t ON a.therapist_id = t.id
+                            WHERE a.id = $1
+                        `, [id]);
+
+                        if (details.length > 0) {
+                            const info = details[0];
+                            // Format date for notification (YYYY-MM-DD -> DD/MM/YYYY)
+                            let dateStr = info.date;
+                            if (info.date instanceof Date) dateStr = info.date.toISOString().split('T')[0];
+
+                            const [y, m, d] = dateStr.split('-');
+                            const formattedDate = `${d}/${m}/${y}`;
+
+                            // Notify Patient
+                            await sendBookingCancellation({
+                                name: info.patient_name,
+                                email: info.patient_email,
+                                phone: info.patient_phone,
+                                date: formattedDate,
+                                time: info.time,
+                                therapistName: info.therapist_name
+                            });
+
+                            // Notify Therapist
+                            if (info.therapist_phone) {
+                                await sendBookingCancellation({
+                                    name: info.therapist_name,
+                                    email: info.therapist_email,
+                                    phone: info.therapist_phone,
+                                    date: formattedDate,
+                                    time: info.time,
+                                    therapistName: info.therapist_name // Not strictly needed for self but nice for consistency
+                                });
+                            }
+                        }
+                    } catch (notifError) {
+                        console.error('Failed to send cancellation notification:', notifError);
+                    }
+                }
+
                 return res.status(200).json(rows[0]);
             } else if (req.method === 'DELETE') {
                 await client.query('DELETE FROM appointments WHERE id=$1', [id]);

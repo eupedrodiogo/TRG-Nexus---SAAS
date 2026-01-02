@@ -32,6 +32,18 @@ const BookingWizard: React.FC = () => {
     const [skipTherapistSelection, setSkipTherapistSelection] = useState(false);
 
     useEffect(() => {
+        // Load drafted data from localStorage if available
+        const savedData = localStorage.getItem('booking_draft');
+        if (savedData) {
+            try {
+                const parsed = JSON.parse(savedData);
+                // Only merge if it's a draft
+                setFormData(prev => ({ ...prev, ...parsed }));
+            } catch (e) {
+                console.error("Failed to load draft", e);
+            }
+        }
+
         // Extract therapistId from URL: /agendar/123
         const pathParts = window.location.pathname.split('/');
         // pathParts[0] = "", pathParts[1] = "agendar", pathParts[2] = "123" (optional)
@@ -41,6 +53,13 @@ const BookingWizard: React.FC = () => {
             setCurrentStep(2); // Jump straight to Schedule
         }
     }, []);
+
+    // Persist form data on change
+    useEffect(() => {
+        if (formData.name || formData.email || formData.date) { // Only save if there's some data
+            localStorage.setItem('booking_draft', JSON.stringify(formData));
+        }
+    }, [formData]);
 
     const updateData = (data: any) => {
         setFormData(prev => ({ ...prev, ...data }));
@@ -77,11 +96,11 @@ const BookingWizard: React.FC = () => {
             if (response.ok) {
                 setPatientId(data.patientId);
 
-                // Allow a moment for state to update before showing completion
                 if (data.emailDebug && data.emailDebug.status !== 'sent') {
                     console.warn('Email warning:', data.emailDebug);
                 }
 
+                localStorage.removeItem('booking_draft'); // Clear draft on success
                 setIsCompleted(true);
             } else {
                 alert(`Erro ao realizar agendamento: ${data.error || 'Tente novamente.'}`);

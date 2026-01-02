@@ -1,7 +1,7 @@
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
-import { sendBookingNotification } from '../_utils/notifications';
+import { sendSessionReminder } from '../_utils/notifications';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -66,13 +66,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
             try {
                 if (pPhone) {
-                    await sendBookingNotification({
+                    await sendSessionReminder({
                         name: pName,
-                        email: pEmail,
                         phone: pPhone,
                         date: appt.date,
-                        time: appt.time,
-                        therapistName: tName
+                        time: appt.time
                     });
 
                     updates.push(appt.id);
