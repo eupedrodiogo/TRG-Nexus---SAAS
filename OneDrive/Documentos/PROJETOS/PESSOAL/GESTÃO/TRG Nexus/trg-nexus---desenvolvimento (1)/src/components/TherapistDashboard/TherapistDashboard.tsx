@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 // import Sidebar from '../Sidebar';
 import { AppView } from 'types';
-import usePlanAccess from '../../hooks/usePlanAccess';
+// import usePlanAccess from '../../hooks/usePlanAccess';
 // import UpgradeModal from '../Shared/UpgradeModal';
 import MainDashboardView from '../MainDashboardView';
 // import PatientsList from '../PatientsList';
@@ -39,23 +39,22 @@ const TherapistDashboard: React.FC = () => {
         setSearchParams({ view: currentView });
     }, [currentView, setSearchParams]);
 
-    // Protect against direct URL access to restricted views
-    useEffect(() => {
-        if (!hasAccess(currentView)) {
-            const viewLabels: Record<AppView, string> = {
-                [AppView.DASHBOARD]: 'Painel Geral',
-                [AppView.AGENDA]: 'Agenda',
-                [AppView.PATIENTS]: 'Clientes',
-                [AppView.THERAPY]: 'Sessão TRG',
-                [AppView.FINANCIAL]: 'Financeiro',
-                [AppView.MARKETING]: 'Marketing & CRM',
-                [AppView.REPORTS]: 'Relatórios',
-                [AppView.SETTINGS]: 'Configurações',
-            };
-            // setUpgradeModal({ isOpen: true, featureName: viewLabels[currentView] });
-            setCurrentView(AppView.DASHBOARD); // Redirect to allowed view
-        }
-    }, [currentView, hasAccess]);
+    // useEffect(() => {
+    //     if (!hasAccess(currentView)) {
+    //         const viewLabels: Record<AppView, string> = {
+    //             [AppView.DASHBOARD]: 'Painel Geral',
+    //             [AppView.AGENDA]: 'Agenda',
+    //             [AppView.PATIENTS]: 'Clientes',
+    //             [AppView.THERAPY]: 'Sessão TRG',
+    //             [AppView.FINANCIAL]: 'Financeiro',
+    //             [AppView.MARKETING]: 'Marketing & CRM',
+    //             [AppView.REPORTS]: 'Relatórios',
+    //             [AppView.SETTINGS]: 'Configurações',
+    //         };
+    //         // setUpgradeModal({ isOpen: true, featureName: viewLabels[currentView] });
+    //         setCurrentView(AppView.DASHBOARD); // Redirect to allowed view
+    //     }
+    // }, [currentView, hasAccess]);
 
     const [isMobileOpen, setIsMobileOpen] = useState(false);
     const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
@@ -68,7 +67,7 @@ const TherapistDashboard: React.FC = () => {
     // const [upgradeModal, setUpgradeModal] = useState<{ isOpen: boolean; featureName?: string }>({ isOpen: false });
 
     // Plan access control
-    const { hasAccess } = usePlanAccess();
+    // const { hasAccess } = usePlanAccess();
 
     // Load therapist data and theme
     const { user } = useAuth();
