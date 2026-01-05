@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import Sidebar from '../Sidebar';
+// import Sidebar from '../Sidebar';
 import { AppView } from 'types';
 import usePlanAccess from '../../hooks/usePlanAccess';
 import UpgradeModal from '../Shared/UpgradeModal';
@@ -179,7 +179,7 @@ const TherapistDashboard: React.FC = () => {
 
     return (
         <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
-            <Sidebar
+            {/* <Sidebar
                 isMobileOpen={isMobileOpen}
                 toggleMobile={() => setIsMobileOpen(!isMobileOpen)}
                 isDesktopCollapsed={isDesktopCollapsed}
@@ -192,7 +192,7 @@ const TherapistDashboard: React.FC = () => {
                 isDarkMode={isDarkMode}
                 toggleTheme={toggleTheme}
                 onLogout={handleLogout}
-            />
+            /> */}
 
             <main className={`flex-1 transition-all duration-300 ease-in-out ${isDesktopCollapsed ? 'md:ml-20' : 'md:ml-0'} overflow-x-hidden`}>
                 {/* Mobile Header Spacer */}
