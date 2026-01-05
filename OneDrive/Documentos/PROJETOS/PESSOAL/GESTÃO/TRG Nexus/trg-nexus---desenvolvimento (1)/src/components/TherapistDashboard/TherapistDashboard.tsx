@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 // import Sidebar from '../Sidebar';
 import { AppView } from 'types';
 import usePlanAccess from '../../hooks/usePlanAccess';
-import UpgradeModal from '../Shared/UpgradeModal';
+// import UpgradeModal from '../Shared/UpgradeModal';
 import MainDashboardView from '../MainDashboardView';
 // import PatientsList from '../PatientsList';
 // import CalendarView from '../CalendarView';
@@ -15,7 +15,7 @@ import MainDashboardView from '../MainDashboardView';
 // import ReportsView from '../ReportsView';
 // import SettingsView from '../SettingsView';
 import { Loader2 } from 'lucide-react';
-import PasswordSetupModal from '../Auth/PasswordSetupModal';
+// import PasswordSetupModal from '../Auth/PasswordSetupModal';
 // import AiAssistant from '../AiAssistant';
 
 
@@ -52,7 +52,7 @@ const TherapistDashboard: React.FC = () => {
                 [AppView.REPORTS]: 'Relatórios',
                 [AppView.SETTINGS]: 'Configurações',
             };
-            setUpgradeModal({ isOpen: true, featureName: viewLabels[currentView] });
+            // setUpgradeModal({ isOpen: true, featureName: viewLabels[currentView] });
             setCurrentView(AppView.DASHBOARD); // Redirect to allowed view
         }
     }, [currentView, hasAccess]);
@@ -65,7 +65,7 @@ const TherapistDashboard: React.FC = () => {
     const [therapist, setTherapist] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [showPasswordSetup, setShowPasswordSetup] = useState(false);
-    const [upgradeModal, setUpgradeModal] = useState<{ isOpen: boolean; featureName?: string }>({ isOpen: false });
+    // const [upgradeModal, setUpgradeModal] = useState<{ isOpen: boolean; featureName?: string }>({ isOpen: false });
 
     // Plan access control
     const { hasAccess } = usePlanAccess();
@@ -220,18 +220,18 @@ const TherapistDashboard: React.FC = () => {
                 />
             )}
 
-            <PasswordSetupModal
+            {/* <PasswordSetupModal
                 isOpen={showPasswordSetup}
                 onSuccess={() => setShowPasswordSetup(false)}
-            />
+            /> */}
 
             {/* <AiAssistant currentView={currentView} /> */}
 
-            <UpgradeModal
+            {/* <UpgradeModal
                 isOpen={upgradeModal.isOpen}
                 onClose={() => setUpgradeModal({ isOpen: false })}
                 featureName={upgradeModal.featureName}
-            />
+            /> */}
         </div>
     );
 };
