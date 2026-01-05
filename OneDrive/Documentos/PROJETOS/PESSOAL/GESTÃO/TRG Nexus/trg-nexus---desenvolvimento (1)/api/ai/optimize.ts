@@ -1,7 +1,7 @@
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { verifyAuth } from '../_utils/auth';
+import { verifyAuth } from '../utils/auth';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     // CORS Setup

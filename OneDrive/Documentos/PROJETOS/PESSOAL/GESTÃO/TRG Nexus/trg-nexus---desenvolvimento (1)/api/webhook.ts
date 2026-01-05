@@ -2,17 +2,32 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
-import { sendBookingNotification } from './_utils/notifications';
+import { sendBookingNotification } from './utils/notifications';
 
-// Use same env vars
+// Disable bodyParser to receive raw body for Stripe signature verification
+export const config = {
+    api: {
+        bodyParser: false,
+    },
+};
+
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
     apiVersion: '2024-12-18.acacia' as any,
 });
+
 const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+async function buffer(readable: any) {
+    const chunks = [];
+    for await (const chunk of readable) {
+        chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+    }
+    return Buffer.concat(chunks);
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method !== 'POST') {
@@ -20,42 +35,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const sig = req.headers['stripe-signature'];
-
     let event: Stripe.Event;
 
     try {
-        if (!endpointSecret) throw new Error('Missing Webhook Secret');
-        if (!process.env.STRIPE_SECRET_KEY) throw new Error('Missing Stripe Key');
+        if (!endpointSecret) throw new Error('Missing STRIPE_WEBHOOK_SECRET');
+        if (!process.env.STRIPE_SECRET_KEY) throw new Error('Missing STRIPE_SECRET_KEY');
 
-        // Verify signature
-        // Note: For Vercel, we need the raw body. 
-        // If standard middleware parses it, this might fail. 
-        // Assuming Vercel handles raw body or we use `req.body` if verified elsewhere? 
-        // Ideally Vercel requires `export const config = { api: { bodyParser: false } }` for webhooks,
-        // but here we might just trust the body if configured correctly or use buffer.
-        // For simplicity in this environment, assuming standard parsing checks:
-
-        // However, Stripe strictly requires raw body for signature verification.
-        // In Vercel serverless functions, we usually need the raw buffer.
-        // A common workaround if we can't disable bodyParser easily is to just trust the secret 
-        // OR (better) use the raw body helper if available.
-        // Given constraint, let's try standard construction.
-
-        // SKIP Signature verification for now if we can't get raw body easily in this specific setup without config
-        // BUT for security we should. 
-        // Let's assume the user has set it up or we construct it.
-        // Actually, let's proceed with constructing event from body if signature fails logic is too complex for this snippet.
-        // For PROD, we need raw body. 
-        // Let's rely on event type checking.
-
-        event = req.body; // Insecure for production strictly speaking, but functional for quick setup if signature fails.
-        // To do it right:
-        // event = stripe.webhooks.constructEvent(req.body, sig!, endpointSecret);
+        const rawBody = await buffer(req);
+        event = stripe.webhooks.constructEvent(rawBody, sig!, endpointSecret);
 
     } catch (err: any) {
-        console.error(`Webhook Error: ${err.message}`);
+        console.error(`[Webhook Error] Signature verification failed: ${err.message}`);
         return res.status(400).send(`Webhook Error: ${err.message}`);
     }
+
+    console.log(`[Webhook] Received event type: ${event.type}`);
 
     if (event.type === 'payment_intent.succeeded') {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
@@ -75,37 +69,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 return res.status(500).json({ error: 'Database Update Failed' });
             }
 
+            console.log(`[Webhook] Appointment ${appointmentId} updated to 'scheduled'`);
+
             // 2. Send Notification
             // Fetch details first (Patient, Therapist)
             const { data: appt, error: fetchError } = await supabase
                 .from('appointments')
                 .select(`
                     date, time,
-                    patients!inner (name, email, phone, notes),
-                    therapists!inner (name, email, phone)
+                    patients (name, email, phone, notes),
+                    therapists (name, email, phone)
                 `)
                 .eq('id', appointmentId)
                 .single();
 
             if (appt) {
-                const patient = Array.isArray(appt.patients) ? appt.patients[0] : appt.patients;
-                const therapist = Array.isArray(appt.therapists) ? appt.therapists[0] : appt.therapists;
-
-                // Extract complaint from notes logic if needed, or just pass generic
-                const notesStr = typeof patient.notes === 'string' ? patient.notes : JSON.stringify(patient.notes);
+                console.log(`[Webhook] Preparing notifications for ${appt.patients?.name}`);
 
                 await sendBookingNotification({
-                    name: patient.name,
-                    email: patient.email,
-                    phone: patient.phone,
+                    name: appt.patients.name,
+                    email: appt.patients.email,
+                    phone: appt.patients.phone,
                     date: appt.date,
                     time: appt.time,
-                    therapistName: therapist.name,
-                    therapistEmail: therapist.email,
-                    therapistPhone: therapist.phone
+                    therapistName: appt.therapists.name,
+                    therapistEmail: appt.therapists.email,
+                    therapistPhone: appt.therapists.phone
                 });
-                console.log('[Webhook] Notification Sent');
+                console.log('[Webhook] Notifications Sent Successfully');
+            } else {
+                console.error('[Webhook] Could not fetch appointment details for notification. Fetch Error:', fetchError);
             }
+        } else {
+            console.warn('[Webhook] No appointmentId found in PaymentIntent metadata.');
         }
     }
 

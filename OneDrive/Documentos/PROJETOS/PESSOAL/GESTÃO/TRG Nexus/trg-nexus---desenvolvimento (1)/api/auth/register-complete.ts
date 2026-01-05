@@ -3,7 +3,7 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 import twilio from 'twilio';
-// import { sendMetaWhatsApp } from '../_utils/notifications';
+// import { sendMetaWhatsApp } from '../utils/notifications';
 
 // Inlined helper to avoid module import issues during debug
 async function sendMetaWhatsAppInlined(to: string, templateName: string, languageCode: string, components: any[] = []) {
@@ -154,12 +154,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
         }
 
+        // Map Price IDs to plan names
+        const mapPriceToPlan = (priceId: string): string => {
+            const planMap: Record<string, string> = {
+                // Current Stripe Price IDs
+                'price_1ScuH5KPo7EypB7VQ7epTjiW': 'trial',        // Estágio R$0.50
+                'price_1ScuH5KPo7EypB7VnIs6qfbQ': 'iniciante',   // Iniciante R$47
+                'price_1Sd8DXKPo7EypB7VZwytTUEP': 'profissional', // Profissional R$97
+                // Legacy values
+                'free': 'iniciante',
+                'pro': 'profissional',
+                'enterprise': 'clinica',
+                // Direct plan names
+                'trial': 'trial',
+                'iniciante': 'iniciante',
+                'profissional': 'profissional',
+                'clinica': 'clinica',
+            };
+            return planMap[priceId] || planMap[priceId?.toLowerCase()] || 'trial';
+        };
+
+        const normalizedPlan = mapPriceToPlan(plan || 'trial');
+
         // 2. Create User
         const { data: user, error: createError } = await supabaseAdmin.auth.admin.createUser({
             email,
             phone: finalPhone,
             password: password,
-            user_metadata: { name, phone: finalPhone, plan },
+            user_metadata: { name, phone: finalPhone, plan: normalizedPlan },
             email_confirm: true,
             phone_confirm: true
         });

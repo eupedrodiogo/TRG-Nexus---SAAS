@@ -1,7 +1,7 @@
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { verifyAuth } from '../_utils/auth';
+import { verifyAuth } from '../utils/auth';
 
 // Initialize Gemini Client
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');

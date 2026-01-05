@@ -1,6 +1,6 @@
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { verifyAuth } from '../_utils/auth';
+import { verifyAuth } from '../utils/auth';
 import type { WhatsAppTemplate } from './templates';
 import { WHATSAPP_TEMPLATES } from './templates';
 

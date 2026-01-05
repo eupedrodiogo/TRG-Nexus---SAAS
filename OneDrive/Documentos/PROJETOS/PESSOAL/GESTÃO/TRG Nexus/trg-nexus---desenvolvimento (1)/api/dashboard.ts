@@ -1,5 +1,6 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
+import { verifyAuth } from './utils/auth';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -13,11 +14,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(500).json({ error: 'Server Misconfiguration', details: 'Missing keys' });
     }
 
-    const { therapistId } = req.query;
+    // 1. Verify Auth First
+    const user = verifyAuth(req, res);
+    if (!user) return; // verifyAuth handles the error response
 
-    if (!therapistId) {
-        return res.status(400).json({ error: 'Missing therapistId' });
-    }
+    const therapistId = user.id;
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 

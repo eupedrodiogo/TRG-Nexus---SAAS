@@ -1,7 +1,12 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import pg from 'pg';
+import { verifyAuth } from './utils/auth';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+    // 1. Verify Auth First
+    const user = verifyAuth(req, res);
+    if (!user) return; // verifyAuth handles the error response
+
     const { Pool } = pg;
     const { patientId } = req.query;
 
@@ -43,10 +48,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             });
         }
 
+        // 0. Verify Patient Ownership
+        const ownershipCheck = await client.query(
+            'SELECT id FROM patients WHERE id = $1 AND therapist_id = $2',
+            [patientId, user.id]
+        );
+
+        if (ownershipCheck.rows.length === 0) {
+            return res.status(403).json({ error: 'Unauthorized access to this patient record' });
+        }
+
         // 1. Fetch Appointments (Timeline)
         const appointmentsRes = await client.query(
-            'SELECT * FROM appointments WHERE patient_id = $1 ORDER BY date DESC, time DESC',
-            [patientId]
+            'SELECT * FROM appointments WHERE patient_id = $1 AND therapist_id = $2 ORDER BY date DESC, time DESC',
+            [patientId, user.id]
         );
 
         const timeline = appointmentsRes.rows.map(apt => ({

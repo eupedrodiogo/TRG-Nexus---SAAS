@@ -1,9 +1,14 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import pg from 'pg';
+import { verifyAuth } from './utils/auth';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+    // 1. Verify Auth First
+    const user = verifyAuth(req, res);
+    if (!user) return; // verifyAuth handles the error response
+
     const { Pool } = pg;
-    const { therapistId } = req.query;
+    const therapistId = user.id;
 
     const connectionString = process.env.POSTGRES_URL ? process.env.POSTGRES_URL.replace('?sslmode=require', '?') : undefined;
 

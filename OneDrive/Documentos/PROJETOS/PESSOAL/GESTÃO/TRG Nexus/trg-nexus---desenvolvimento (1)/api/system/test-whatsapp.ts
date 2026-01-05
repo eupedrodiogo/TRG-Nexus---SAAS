@@ -1,6 +1,6 @@
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { sendBookingNotification } from '../_utils/notifications';
+import { sendBookingNotification } from '../utils/notifications';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method !== 'POST') {

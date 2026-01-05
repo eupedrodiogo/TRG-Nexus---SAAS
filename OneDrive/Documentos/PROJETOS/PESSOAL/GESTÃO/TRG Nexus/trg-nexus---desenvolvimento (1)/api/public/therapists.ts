@@ -16,8 +16,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     try {
-        // Fetch only active therapists and select safe public fields
-        const { data: therapists, error } = await supabase
+        let query = supabase
             .from('therapists')
             .select(`
                 id,
@@ -35,6 +34,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 is_verified
             `)
             .eq('status', 'active');
+
+        // Check for specific ID filter
+        if (req.query.id) {
+            query = query.eq('id', req.query.id);
+        }
+
+        const { data: therapists, error } = await query;
 
         if (error) throw error;
 

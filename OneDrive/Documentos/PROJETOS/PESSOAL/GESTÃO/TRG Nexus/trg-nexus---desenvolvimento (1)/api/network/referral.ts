@@ -1,7 +1,7 @@
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
-import { sendBookingNotification } from '../_utils/notifications';
+import { sendBookingNotification } from '../utils/notifications';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

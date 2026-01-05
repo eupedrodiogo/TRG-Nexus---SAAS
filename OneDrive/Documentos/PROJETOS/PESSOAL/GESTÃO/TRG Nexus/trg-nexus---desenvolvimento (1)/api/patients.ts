@@ -1,6 +1,6 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import pg from 'pg';
-import { verifyAuth } from './_utils/auth';
+import { verifyAuth } from './utils/auth';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 1. Verify Auth First
@@ -57,7 +57,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     'INSERT INTO patients (name, email, phone, status, notes, therapist_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
                     [name, email, phone, status, notes, user.id]
                 );
-                return res.status(201).json(rows[0]);
+                return res.status(201).json(rows[0] as Patient);
             } else {
                 res.setHeader('Allow', ['GET', 'POST']);
                 return res.status(405).end(`Method ${req.method} Not Allowed`);

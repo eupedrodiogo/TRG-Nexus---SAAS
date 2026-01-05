@@ -21,16 +21,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
         const stripe = getStripe();
         if (action === 'checkout') {
-            const { priceId, successUrl, cancelUrl, mode = 'payment', couponId } = req.body;
+            const { priceId, amount, productName, successUrl, cancelUrl, mode = 'payment', couponId } = req.body;
+
+            let lineItem: Stripe.Checkout.SessionCreateParams.LineItem;
+
+            if (amount) {
+                // Dynamic Pricing (Inline Price)
+                lineItem = {
+                    price_data: {
+                        currency: 'brl',
+                        product_data: {
+                            name: productName || 'Sessão de Terapia',
+                        },
+                        unit_amount: Math.round(Number(amount)), // Ensure integer cents
+                    },
+                    quantity: 1,
+                };
+            } else {
+                // Legacy / Fixed Product ID
+                lineItem = {
+                    price: priceId,
+                    quantity: 1,
+                };
+            }
 
             const sessionParams: Stripe.Checkout.SessionCreateParams = {
                 payment_method_types: ['card'],
-                line_items: [
-                    {
-                        price: priceId,
-                        quantity: 1,
-                    },
-                ],
+                line_items: [lineItem],
                 mode: mode as Stripe.Checkout.Session.Mode,
                 success_url: successUrl,
                 cancel_url: cancelUrl,
@@ -52,6 +69,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 amount,
                 currency,
                 metadata,
+                automatic_payment_methods: { enabled: true },
             });
 
             return res.status(200).json({ clientSecret: paymentIntent.client_secret });

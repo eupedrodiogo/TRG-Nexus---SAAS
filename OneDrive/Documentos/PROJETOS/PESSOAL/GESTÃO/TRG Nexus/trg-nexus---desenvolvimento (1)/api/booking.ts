@@ -47,53 +47,59 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // 3. Create Appointment
-        status: status, type: 'Primeira Consulta',
-            notes: JSON.stringify(anamnesisData)
-    }).select('id');
-    const { data: rows, error: aError } = await appointmentQuery;
-    if (aError) throw aError;
-
-    // 4. Notifications (Only if Confirmed)
-    if (status === 'scheduled') {
-        console.log('[Booking] Starting notifications...');
-
-        const { data: therapistData } = await supabase
-            .from('therapists')
-            .select('email, name, phone')
-            .eq('id', therapistId)
-            .single();
-
-        const notificationData = {
-            name,
-            email,
-            phone,
+        const appointmentQuery = supabase.from('appointments').insert({
+            patient_id: patientId,
+            therapist_id: therapistId,
             date,
             time,
-            therapistName: therapistData?.name || 'Terapeuta TRG',
-            therapistEmail: therapistData?.email,
-            therapistPhone: therapistData?.phone, // Add phone for WhatsApp
-            mainComplaint: anamnesisData.queixaPrincipal,
-            location: 'Sessão Online'
-        };
+            status: status,
+            type: 'Primeira Consulta',
+            notes: JSON.stringify(anamnesisData)
+        }).select('id');
+        const { data: rows, error: aError } = await appointmentQuery;
+        if (aError) throw aError;
 
-        // We use the centralized notification utility to ensure iCal and other premium features are applied
-        try {
-            const { sendBookingNotification } = await import('./_utils/notifications');
-            await sendBookingNotification(notificationData);
-        } catch (nError) {
-            console.error('[Booking] Notification Error:', nError);
-            // Fallback to simple email if utility fails (optional, but keep it robust)
+        // 4. Notifications (Only if Confirmed)
+        if (status === 'scheduled') {
+            console.log('[Booking] Starting notifications...');
+
+            const { data: therapistData } = await supabase
+                .from('therapists')
+                .select('email, name, phone')
+                .eq('id', therapistId)
+                .single();
+
+            const notificationData = {
+                name,
+                email,
+                phone,
+                date,
+                time,
+                therapistName: therapistData?.name || 'Terapeuta TRG',
+                therapistEmail: therapistData?.email,
+                therapistPhone: therapistData?.phone, // Add phone for WhatsApp
+                mainComplaint: anamnesisData.queixaPrincipal,
+                location: 'Sessão Online'
+            };
+
+            // We use the centralized notification utility to ensure iCal and other premium features are applied
+            try {
+                const { sendBookingNotification } = await import('./utils/notifications');
+                await sendBookingNotification(notificationData);
+            } catch (nError) {
+                console.error('[Booking] Notification Error:', nError);
+                // Fallback to simple email if utility fails (optional, but keep it robust)
+            }
+
+            console.log('[Booking] Notifications processed.');
+        } else {
+            console.log(`[Booking] Status is ${status}, skipping notifications.`);
         }
 
-        console.log('[Booking] Notifications processed.');
-    } else {
-        console.log(`[Booking] Status is ${status}, skipping notifications.`);
+        return res.status(200).json({ message: 'Booking processed', patientId, appointmentId: rows && rows[0] ? rows[0].id : undefined });
+
+    } catch (error: any) {
+        console.error('[Booking] Fatal Error:', error);
+        return res.status(500).json({ error: error.message });
     }
-
-    return res.status(200).json({ message: 'Booking processed', patientId, appointmentId: rows && rows[0] ? rows[0].id : undefined });
-
-} catch (error: any) {
-    console.error('[Booking] Fatal Error:', error);
-    return res.status(500).json({ error: error.message });
-}
 }

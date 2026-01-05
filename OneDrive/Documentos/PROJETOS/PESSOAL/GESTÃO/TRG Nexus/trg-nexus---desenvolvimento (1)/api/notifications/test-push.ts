@@ -1,7 +1,7 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import webpush from 'web-push';
 import { supabase } from '../../lib/supabase';
-import { verifyAuth } from '../_utils/auth';
+import { verifyAuth } from '../utils/auth';
 
 // Configure VAPID keys
 // In production, these should be environment variables

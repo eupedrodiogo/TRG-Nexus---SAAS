@@ -3,7 +3,7 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import path from 'path';
-import { signToken } from '../_utils/auth';
+import { signToken } from '../utils/auth';
 
 // Force load .env.local for local dev
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
