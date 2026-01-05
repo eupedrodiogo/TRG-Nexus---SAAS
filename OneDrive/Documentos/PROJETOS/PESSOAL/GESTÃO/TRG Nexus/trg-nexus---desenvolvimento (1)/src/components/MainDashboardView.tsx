@@ -24,7 +24,7 @@ import {
   Share2
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import NotificationBell from './NotificationBell';
+// // import NotificationBell from './NotificationBell';
 import {
   AreaChart,
   Area,
@@ -40,7 +40,7 @@ import {
   Bar
 } from 'recharts';
 import AddPatientModal from './AddPatientModal';
-import PushNotificationManager from './PushNotificationManager';
+// // import PushNotificationManager from './PushNotificationManager';
 
 interface DashboardProps {
   isDarkMode?: boolean;
@@ -129,7 +129,7 @@ const MainDashboardView: React.FC<DashboardProps> = ({ isDarkMode = false, onOpe
 
   return (
     <div className="space-y-6 animate-fade-in pb-20 md:pb-0">
-      <PushNotificationManager />
+      {/* <PushNotificationManager /> */}
 
       {/* Header & Quick Actions */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
@@ -161,10 +161,10 @@ const MainDashboardView: React.FC<DashboardProps> = ({ isDarkMode = false, onOpe
             <span className="font-bold text-sm">Link de Agendamento</span>
           </button>
 
-          <NotificationBell
+          {/* <NotificationBell
             role="therapist"
             className="p-2.5 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors relative group flex items-center justify-center"
-          />
+          /> */}
         </div>
       </div>
 
