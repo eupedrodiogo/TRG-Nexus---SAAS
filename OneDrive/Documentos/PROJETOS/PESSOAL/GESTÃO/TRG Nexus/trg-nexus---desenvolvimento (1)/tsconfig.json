@@ -21,13 +21,17 @@
     "jsx": "react-jsx",
     "paths": {
       "@/*": [
-        "./*"
+        "./src/*"
+      ],
+      "types": [
+        "./types.ts"
       ]
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
   "include": [
-    "."
+    "src",
+    "types.ts"
   ]
 }

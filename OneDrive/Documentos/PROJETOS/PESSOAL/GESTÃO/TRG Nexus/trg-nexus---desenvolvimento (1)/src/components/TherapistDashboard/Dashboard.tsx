@@ -4,6 +4,8 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import Sidebar from '../Sidebar';
 import { AppView } from 'types';
+import usePlanAccess from '../../hooks/usePlanAccess';
+import UpgradeModal from '../Shared/UpgradeModal';
 import Dashboard from '../Dashboard';
 import PatientsList from '../PatientsList';
 import CalendarView from '../CalendarView';
@@ -37,6 +39,24 @@ const TherapistDashboard: React.FC = () => {
         setSearchParams({ view: currentView });
     }, [currentView, setSearchParams]);
 
+    // Protect against direct URL access to restricted views
+    useEffect(() => {
+        if (!hasAccess(currentView)) {
+            const viewLabels: Record<AppView, string> = {
+                [AppView.DASHBOARD]: 'Painel Geral',
+                [AppView.AGENDA]: 'Agenda',
+                [AppView.PATIENTS]: 'Clientes',
+                [AppView.THERAPY]: 'Sessão TRG',
+                [AppView.FINANCIAL]: 'Financeiro',
+                [AppView.MARKETING]: 'Marketing & CRM',
+                [AppView.REPORTS]: 'Relatórios',
+                [AppView.SETTINGS]: 'Configurações',
+            };
+            setUpgradeModal({ isOpen: true, featureName: viewLabels[currentView] });
+            setCurrentView(AppView.DASHBOARD); // Redirect to allowed view
+        }
+    }, [currentView, hasAccess]);
+
     const [isMobileOpen, setIsMobileOpen] = useState(false);
     const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
     // const [isDarkMode, setIsDarkMode] = useState(false); // Managed by Context
@@ -45,6 +65,10 @@ const TherapistDashboard: React.FC = () => {
     const [therapist, setTherapist] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [showPasswordSetup, setShowPasswordSetup] = useState(false);
+    const [upgradeModal, setUpgradeModal] = useState<{ isOpen: boolean; featureName?: string }>({ isOpen: false });
+
+    // Plan access control
+    const { hasAccess } = usePlanAccess();
 
     // Load therapist data and theme
     const { user } = useAuth();
@@ -200,6 +224,12 @@ const TherapistDashboard: React.FC = () => {
             />
 
             <AiAssistant currentView={currentView} />
+
+            <UpgradeModal
+                isOpen={upgradeModal.isOpen}
+                onClose={() => setUpgradeModal({ isOpen: false })}
+                featureName={upgradeModal.featureName}
+            />
         </div>
     );
 };

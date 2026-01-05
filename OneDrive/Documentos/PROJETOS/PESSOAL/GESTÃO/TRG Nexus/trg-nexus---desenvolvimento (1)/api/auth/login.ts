@@ -3,10 +3,17 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import path from 'path';
-import { signToken } from '../utils/auth';
+import * as jwt from 'jsonwebtoken';
 
 // Force load .env.local for local dev
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+
+// Inlined auth utilities to avoid module resolution issues in Vercel Serverless
+const getSecret = () => process.env.SECRET_KEY || 'change-this-secret-in-prod';
+function signToken(payload: object) {
+    return jwt.sign(payload, getSecret(), { expiresIn: '8h' });
+}
+
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 1. CORS Setup

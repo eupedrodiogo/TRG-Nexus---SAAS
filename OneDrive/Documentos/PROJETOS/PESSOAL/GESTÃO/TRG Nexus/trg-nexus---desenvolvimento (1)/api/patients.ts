@@ -1,6 +1,24 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import pg from 'pg';
-import { verifyAuth } from './utils/auth';
+import * as jwt from 'jsonwebtoken';
+
+// Inlined auth utilities to avoid module resolution issues in Vercel Serverless
+const getSecret = () => process.env.SECRET_KEY || 'change-this-secret-in-prod';
+function verifyAuth(req: VercelRequest, res: VercelResponse): { id: string; email: string } | null {
+    const auth = req.headers['authorization'];
+    if (!auth) {
+        res.status(401).json({ message: 'Token não fornecido' });
+        return null;
+    }
+    const token = (Array.isArray(auth) ? auth[0] : auth).split(' ')[1];
+    try {
+        const decoded = jwt.verify(token, getSecret()) as any;
+        return decoded;
+    } catch {
+        res.status(403).json({ message: 'Token inválido' });
+        return null;
+    }
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 1. Verify Auth First

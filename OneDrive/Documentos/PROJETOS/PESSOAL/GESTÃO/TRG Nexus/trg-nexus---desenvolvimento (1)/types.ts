@@ -23,8 +23,19 @@ export interface Appointment {
   patientName: string;
   date: string;
   time: string;
-  status: 'Agendado' | 'Concluído' | 'Cancelado';
+  status: 'Agendado' | 'Concluído' | 'Cancelado' | 'scheduled' | 'pending_payment' | 'completed' | 'cancelled';
   type: 'Anamnese' | 'Cronológico' | 'Reprocessamento' | 'Somático' | 'Temático' | 'Futuro' | 'Potencialização';
+  sessionData?: SessionData;
+}
+
+export interface SessionData {
+  chronologicalHistory?: Record<string, number[]>;
+  somaticSud?: number;
+  thematicSud?: number;
+  futureSud?: number; // Positive SUD
+  potentializationSud?: number; // Positive SUD
+  notes?: string;
+  [key: string]: any;
 }
 
 export interface BlockedTime {
@@ -55,6 +66,55 @@ export enum AppView {
   REPORTS = 'reports',
   SETTINGS = 'settings',
 }
+
+// Subscription Plans
+export enum TherapistPlan {
+  TRIAL = 'trial',
+  INICIANTE = 'iniciante',
+  PROFISSIONAL = 'profissional',
+  CLINICA = 'clinica',
+}
+
+// Feature access per plan
+export const PLAN_FEATURES: Record<TherapistPlan, AppView[]> = {
+  [TherapistPlan.TRIAL]: [
+    AppView.DASHBOARD,
+    AppView.AGENDA,
+    AppView.PATIENTS,
+    AppView.THERAPY,
+    AppView.FINANCIAL,
+    AppView.MARKETING,
+    AppView.REPORTS,
+    AppView.SETTINGS,
+  ],
+  [TherapistPlan.INICIANTE]: [
+    AppView.DASHBOARD,
+    AppView.AGENDA,
+    AppView.PATIENTS,
+    AppView.THERAPY,
+    AppView.SETTINGS,
+  ],
+  [TherapistPlan.PROFISSIONAL]: [
+    AppView.DASHBOARD,
+    AppView.AGENDA,
+    AppView.PATIENTS,
+    AppView.THERAPY,
+    AppView.FINANCIAL,
+    AppView.MARKETING,
+    AppView.REPORTS,
+    AppView.SETTINGS,
+  ],
+  [TherapistPlan.CLINICA]: [
+    AppView.DASHBOARD,
+    AppView.AGENDA,
+    AppView.PATIENTS,
+    AppView.THERAPY,
+    AppView.FINANCIAL,
+    AppView.MARKETING,
+    AppView.REPORTS,
+    AppView.SETTINGS,
+  ],
+};
 
 export interface NavItem {
   id: AppView;
