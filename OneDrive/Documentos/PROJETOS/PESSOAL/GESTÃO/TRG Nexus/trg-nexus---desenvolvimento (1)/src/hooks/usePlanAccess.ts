@@ -1,4 +1,5 @@
-import { AppView, TherapistPlan, PLAN_FEATURES } from 'types';
+import { AppView, TherapistPlan } from 'types';
+import { PLAN_FEATURES } from '../config/planConfig';
 
 interface PlanAccessHook {
     plan: TherapistPlan;
