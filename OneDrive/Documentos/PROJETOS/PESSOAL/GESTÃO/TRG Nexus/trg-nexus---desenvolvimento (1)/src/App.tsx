@@ -10,7 +10,7 @@ import BookingWizard from './components/PatientBooking/BookingWizard';
 import PatientLandingPage from './components/PatientBooking/PatientLandingPage';
 import LoginPage from './components/Auth/LoginPage';
 import RegisterPage from './components/Auth/RegisterPage';
-import TherapistDashboard from './components/TherapistDashboard/Dashboard';
+import TherapistDashboard from './components/TherapistDashboard/TherapistDashboard';
 import LandingPage from './components/LandingPage';
 import InstallPrompt from './components/InstallPrompt';
 import PaymentSuccess from './components/PaymentSuccess';

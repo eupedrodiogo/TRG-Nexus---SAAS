@@ -50,7 +50,7 @@ interface DashboardProps {
   therapist?: any;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ isDarkMode = false, onOpenNotifications, privacyMode = false, therapist }) => {
+const MainDashboardView: React.FC<DashboardProps> = ({ isDarkMode = false, onOpenNotifications, privacyMode = false, therapist }) => {
   const [showAiInsights, setShowAiInsights] = useState(true);
   const [isAddPatientModalOpen, setIsAddPatientModalOpen] = useState(false);
   const [stats, setStats] = useState({
@@ -273,4 +273,4 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode = false, onOpenNotific
   );
 };
 
-export default Dashboard;
+export default MainDashboardView;
