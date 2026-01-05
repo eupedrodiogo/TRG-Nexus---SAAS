@@ -6,7 +6,7 @@ import Sidebar from '../Sidebar';
 import { AppView } from 'types';
 import usePlanAccess from '../../hooks/usePlanAccess';
 import UpgradeModal from '../Shared/UpgradeModal';
-import Dashboard from '../Dashboard';
+import MainDashboard from '../Dashboard';
 import PatientsList from '../PatientsList';
 import CalendarView from '../CalendarView';
 import SessionView from '../SessionView';
@@ -141,7 +141,7 @@ const TherapistDashboard: React.FC = () => {
     const renderView = () => {
         switch (currentView) {
             case AppView.DASHBOARD:
-                return <Dashboard onChangeView={setCurrentView} therapist={therapist} />;
+                return <MainDashboard onChangeView={setCurrentView} therapist={therapist} />;
             case AppView.PATIENTS:
                 return <PatientsList onNavigateToSession={() => setCurrentView(AppView.THERAPY)} />;
             case AppView.AGENDA:

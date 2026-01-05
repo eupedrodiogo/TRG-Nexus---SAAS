@@ -44,13 +44,8 @@ const ProtectedRoute = () => {
   return <Outlet />;
 };
 
-// Capture recovery event that might fire before React mounts
-let isRecoveryFlow = false;
-supabase.auth.onAuthStateChange((event) => {
-  if (event === 'PASSWORD_RECOVERY') {
-    isRecoveryFlow = true;
-  }
-});
+// Note: isRecoveryFlow will be handled inside AppContent via onAuthStateChange
+
 
 function AppContent() {
   const { isDarkMode, toggleTheme } = useTheme();
@@ -58,12 +53,6 @@ function AppContent() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // 1. Handle pre-mount recovery events
-    if (isRecoveryFlow) {
-      console.log('Pre-mount PASSWORD_RECOVERY detected, redirecting...');
-      isRecoveryFlow = false;
-      navigate('/update-password');
-    }
 
     // 2. Listen for Supabase specific Password Recovery event (post-mount)
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {

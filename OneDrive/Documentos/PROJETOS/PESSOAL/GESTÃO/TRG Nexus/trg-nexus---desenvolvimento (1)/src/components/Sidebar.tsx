@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import {
   LayoutDashboard,
@@ -23,8 +22,8 @@ import {
 import { AppView, NavItem } from 'types';
 import usePlanAccess from '../hooks/usePlanAccess';
 import UpgradeModal from './Shared/UpgradeModal';
-
-
+import { useAuth } from '../contexts/AuthContext';
+import FeedbackModal from './Shared/FeedbackModal';
 
 interface SidebarProps {
   isMobileOpen: boolean;
@@ -40,11 +39,6 @@ interface SidebarProps {
   onLogout?: () => void;
 }
 
-import { useAuth } from '../contexts/AuthContext';
-import FeedbackModal from './Shared/FeedbackModal';
-
-// ... imports remain the same
-
 const Sidebar: React.FC<SidebarProps> = ({
   isMobileOpen,
   toggleMobile,
@@ -58,6 +52,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   togglePrivacy,
   onLogout
 }) => {
+
   const { user } = useAuth();
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const [upgradeModal, setUpgradeModal] = useState<{ isOpen: boolean; featureName?: string }>({ isOpen: false });
