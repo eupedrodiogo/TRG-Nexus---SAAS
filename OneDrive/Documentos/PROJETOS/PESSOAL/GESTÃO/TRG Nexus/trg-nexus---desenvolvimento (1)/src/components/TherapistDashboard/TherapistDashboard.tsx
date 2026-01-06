@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 // import Sidebar from '../Sidebar';
-import { AppView } from 'types';
+import { AppView } from '../../enums';
 import usePlanAccess from '../../hooks/usePlanAccess';
 // import UpgradeModal from '../Shared/UpgradeModal';
 import MainDashboardView from '../MainDashboardView';

@@ -1,4 +1,4 @@
-import { TherapistPlan, AppView } from 'types';
+import { TherapistPlan, AppView } from '../enums';
 
 // Feature access per plan
 export const PLAN_FEATURES: Record<TherapistPlan, AppView[]> = {
