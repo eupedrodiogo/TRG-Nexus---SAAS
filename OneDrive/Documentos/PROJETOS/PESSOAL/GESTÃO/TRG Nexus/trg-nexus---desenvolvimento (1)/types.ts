@@ -57,7 +57,9 @@ export interface NotificationItem {
 }
 
 // Re-export Enums
+// Re-export Enums
 export { AppView, TherapistPlan } from './src/enums';
+import { AppView } from './src/enums';
 
 
 

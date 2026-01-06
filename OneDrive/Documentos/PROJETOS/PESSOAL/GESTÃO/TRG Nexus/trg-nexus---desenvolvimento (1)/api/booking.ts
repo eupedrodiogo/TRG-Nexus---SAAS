@@ -16,8 +16,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const { name, email, phone, date, time, therapistId, status = 'scheduled', ...anamnesisData } = req.body || {};
 
-    if (!name || !email || !date || !time) {
-        return res.status(400).json({ error: 'Missing required fields' });
+    if (!name || !email || !date || !time || !therapistId) {
+        return res.status(400).json({ error: 'Missing required fields: name, email, date, time, or therapistId' });
     }
 
     try {

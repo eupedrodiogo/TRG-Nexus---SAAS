@@ -187,10 +187,9 @@ const PaymentStep: React.FC<PaymentStepProps> = ({ data, appointmentId, onBack, 
                     options={{
                         clientSecret,
                         locale: 'pt-BR',
-                        externalPaymentMethods: [
-                            'cpmt_1Sm4ZCKPo7EypB7VbBXdaPT6', // PicPay
-                            'cpmt_1Sm4aKKPo7EypB7VlUIB55XO'  // PayPal
-                        ]
+                        appearance: {
+                            theme: 'stripe',
+                        },
                     }}
                 >
                     <CheckoutForm onBack={onBack} onComplete={onComplete} amount={DISPLAY_PRICE} />

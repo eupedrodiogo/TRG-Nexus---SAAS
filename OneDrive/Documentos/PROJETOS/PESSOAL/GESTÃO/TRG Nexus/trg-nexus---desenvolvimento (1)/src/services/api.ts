@@ -1,6 +1,8 @@
 
 import { Patient, Appointment, NotificationItem } from 'types';
+import { Patient, Appointment, NotificationItem } from 'types';
 import { MOCK_PATIENTS, MOCK_APPOINTMENTS, MOCK_STATS } from '../constants';
+import { supabase } from '../lib/supabase';
 
 /**
  * TRG NEXUS API SERVICE
@@ -65,15 +67,41 @@ export const api = {
         console.warn('Backend login failed, falling back to local check', e);
       }
 
-      // Local Fallback
-      await delay(1000); // Simulate network
+      // Local / Supabase Fallback
+      console.warn('Backend login failed, attempting direct Supabase Auth...');
+
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (!authError && authData.user) {
+        localStorage.setItem('TRG_AUTH_TOKEN', 'supabase-session'); // Marker
+        localStorage.setItem('TRG_AUTH', 'true');
+
+        // Fetch therapist profile
+        const { data: therapist } = await supabase
+          .from('therapists')
+          .select('*')
+          .eq('email', email)
+          .single();
+
+        if (therapist) {
+          localStorage.setItem('therapist', JSON.stringify(therapist));
+        }
+        return true;
+      }
+
+      // Final Mock Fallback (if offline or wrong credentials)
+      await delay(1000);
       if (email === 'admin@trgnexus.com' && password.length > 0) {
         localStorage.setItem('TRG_AUTH', 'true');
         return true;
       }
-      throw new Error('Credenciais inválidas');
+      throw new Error('Credenciais inválidas e falha na conexão');
     },
-    logout: () => {
+    logout: async () => {
+      await supabase.auth.signOut();
       localStorage.removeItem('TRG_AUTH_TOKEN');
       localStorage.removeItem('TRG_AUTH');
     }
@@ -83,7 +111,21 @@ export const api = {
     list: async (): Promise<Patient[]> => {
       try {
         return await apiFetch('/api/patients');
-      } catch (e) { console.warn('Fetch patients failed, using local'); }
+      } catch (e) { console.warn('Fetch patients failed, using Supabase direct'); }
+
+      // Supabase Direct Fallback
+      try {
+        const therapistId = getTherapistId();
+        if (therapistId) {
+          const { data, error } = await supabase
+            .from('patients')
+            .select('*')
+            .eq('therapist_id', therapistId)
+            .order('created_at', { ascending: false });
+
+          if (data && !error) return data as Patient[];
+        }
+      } catch (err) { console.warn('Supabase fetch failed', err); }
 
       await delay(600);
       const local = localStorage.getItem('TRG_LOCAL_PATIENTS');
@@ -145,7 +187,31 @@ export const api = {
         const therapistId = getTherapistId();
         const query = therapistId ? `?therapistId=${therapistId}` : '';
         return await apiFetch(`/api/appointments${query}`);
-      } catch (e) { console.warn('Fetch appointments failed, using local'); }
+      } catch (e) { console.warn('Fetch appointments failed, using Supabase direct'); }
+
+      // Supabase Direct Fallback
+      try {
+        const therapistId = getTherapistId();
+        if (therapistId) {
+          const { data, error } = await supabase
+            .from('appointments')
+            .select('*, patients(name)')
+            .eq('therapist_id', therapistId);
+
+          if (data && !error) {
+            return data.map((apt: any) => ({
+              id: apt.id,
+              patientId: apt.patient_id,
+              patientName: apt.patients?.name || 'Desconhecido',
+              date: apt.date,
+              time: apt.time,
+              status: apt.status,
+              type: apt.type,
+              sessionData: apt.session_data
+            })) as Appointment[];
+          }
+        }
+      } catch (err) { console.warn('Supabase appointment fetch failed', err); }
 
       await delay(500);
       return MOCK_APPOINTMENTS;

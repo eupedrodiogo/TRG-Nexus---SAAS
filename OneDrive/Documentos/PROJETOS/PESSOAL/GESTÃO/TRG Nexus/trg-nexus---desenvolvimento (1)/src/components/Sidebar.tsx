@@ -20,7 +20,6 @@ import {
   Lock
 } from 'lucide-react';
 import { AppView, NavItem } from 'types';
-import usePlanAccess from '../hooks/usePlanAccess';
 import UpgradeModal from './Shared/UpgradeModal';
 import { useAuth } from '../contexts/AuthContext';
 import FeedbackModal from './Shared/FeedbackModal';
@@ -37,6 +36,7 @@ interface SidebarProps {
   isPrivacyMode?: boolean;
   togglePrivacy?: () => void;
   onLogout?: () => void;
+  hasAccess: (view: AppView) => boolean; // New prop
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -50,13 +50,14 @@ const Sidebar: React.FC<SidebarProps> = ({
   toggleTheme,
   isPrivacyMode,
   togglePrivacy,
-  onLogout
+  onLogout,
+  hasAccess // Destructure new prop
 }) => {
 
   const { user } = useAuth();
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const [upgradeModal, setUpgradeModal] = useState<{ isOpen: boolean; featureName?: string }>({ isOpen: false });
-  const { hasAccess, plan } = usePlanAccess();
+  // const { hasAccess, plan } = usePlanAccess(); // Removed to avoid circular dependency
 
   const navItems: NavItem[] = [
     { id: AppView.DASHBOARD, label: 'Painel Geral', icon: LayoutDashboard },

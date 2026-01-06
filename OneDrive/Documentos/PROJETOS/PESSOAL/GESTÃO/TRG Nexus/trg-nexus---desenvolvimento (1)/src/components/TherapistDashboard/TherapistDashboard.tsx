@@ -2,28 +2,70 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-// import Sidebar from '../Sidebar';
-import { AppView } from '../../enums';
-import usePlanAccess from '../../hooks/usePlanAccess';
-// import UpgradeModal from '../Shared/UpgradeModal';
+import Sidebar from '../Sidebar';
+import { AppView, TherapistPlan } from '../../enums';
+// import usePlanAccess from '../../hooks/usePlanAccess'; // INLINED
+import { PLAN_FEATURES } from '../../config/planConfig';
+import UpgradeModal from '../Shared/UpgradeModal';
 import MainDashboardView from '../MainDashboardView';
-// import PatientsList from '../PatientsList';
-// import CalendarView from '../CalendarView';
-// import SessionView from '../SessionView';
-// import FinancialView from '../FinancialView';
-// import MarketingView from '../MarketingView';
-// import ReportsView from '../ReportsView';
-// import SettingsView from '../SettingsView';
+import PatientsList from '../PatientsList';
+import CalendarView from '../CalendarView';
+import SessionView from '../SessionView';
+import FinancialView from '../FinancialView';
+import MarketingView from '../MarketingView';
+import ReportsView from '../ReportsView';
+import SettingsView from '../SettingsView';
 import { Loader2 } from 'lucide-react';
-// import PasswordSetupModal from '../Auth/PasswordSetupModal';
-// import AiAssistant from '../AiAssistant';
+import PasswordSetupModal from '../Auth/PasswordSetupModal';
+import AiAssistant from '../AiAssistant';
 
 
 import { useTheme } from '../../contexts/ThemeContext';
 
+// INLINED HELPERS
+const PLAN_LABELS: Record<TherapistPlan, string> = {
+    [TherapistPlan.TRIAL]: 'Trial (7 dias)',
+    [TherapistPlan.INICIANTE]: 'Iniciante',
+    [TherapistPlan.PROFISSIONAL]: 'Profissional',
+    [TherapistPlan.CLINICA]: 'Clínica',
+};
+
+function normalizePlan(rawPlan: string): TherapistPlan {
+    const planMap: Record<string, TherapistPlan> = {
+        'trial': TherapistPlan.TRIAL,
+        'iniciante': TherapistPlan.INICIANTE,
+        'profissional': TherapistPlan.PROFISSIONAL,
+        'clinica': TherapistPlan.CLINICA,
+        'free': TherapistPlan.INICIANTE,
+        'pro': TherapistPlan.PROFISSIONAL,
+        'enterprise': TherapistPlan.CLINICA,
+        'price_1ScuH5KPo7EypB7VQ7epTjiW': TherapistPlan.TRIAL,
+        'price_1ScuH5KPo7EypB7VnIs6qfbQ': TherapistPlan.INICIANTE,
+        'price_1Sd8DXKPo7EypB7VZwytTUEP': TherapistPlan.PROFISSIONAL,
+    };
+    return planMap[rawPlan.toLowerCase()] || TherapistPlan.TRIAL;
+}
+
 const TherapistDashboard: React.FC = () => {
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
+
+    // INLINED HOOK LOGIC
+    const useLocalPlanAccess = () => {
+        const therapistData = localStorage.getItem('therapist');
+        const therapist = therapistData ? JSON.parse(therapistData) : null;
+        const rawPlan = therapist?.plan || 'trial';
+        const plan = normalizePlan(rawPlan);
+        const allowedViews = PLAN_FEATURES[plan] || PLAN_FEATURES[TherapistPlan.TRIAL];
+
+        const hasAccess = (view: AppView): boolean => {
+            return allowedViews.includes(view);
+        };
+
+        return { hasAccess, plan };
+    };
+
+    const { hasAccess } = useLocalPlanAccess();
 
     const [currentView, setCurrentView] = useState<AppView>(() => {
         const viewParam = searchParams.get('view');
@@ -52,7 +94,7 @@ const TherapistDashboard: React.FC = () => {
                 [AppView.REPORTS]: 'Relatórios',
                 [AppView.SETTINGS]: 'Configurações',
             };
-            // setUpgradeModal({ isOpen: true, featureName: viewLabels[currentView] });
+            setUpgradeModal({ isOpen: true, featureName: viewLabels[currentView] });
             setCurrentView(AppView.DASHBOARD); // Redirect to allowed view
         }
     }, [currentView, hasAccess]);
@@ -65,10 +107,7 @@ const TherapistDashboard: React.FC = () => {
     const [therapist, setTherapist] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [showPasswordSetup, setShowPasswordSetup] = useState(false);
-    // const [upgradeModal, setUpgradeModal] = useState<{ isOpen: boolean; featureName?: string }>({ isOpen: false });
-
-    // Plan access control
-    const { hasAccess } = usePlanAccess();
+    const [upgradeModal, setUpgradeModal] = useState<{ isOpen: boolean; featureName?: string }>({ isOpen: false });
 
     // Load therapist data and theme
     const { user } = useAuth();
@@ -126,6 +165,7 @@ const TherapistDashboard: React.FC = () => {
         // Theme check -> NOW HANDLED BY CONTEXT
     }, [user]);
 
+    // Cleanup unused functions/vars for now to avoid linter errors
     const handleNavigateToPatient = (id: string) => {
         // This function allows components to switch to the patient view
         // For now, we just switch to the Patients view, but ideally we would pass the ID
@@ -142,7 +182,6 @@ const TherapistDashboard: React.FC = () => {
         switch (currentView) {
             case AppView.DASHBOARD:
                 return <MainDashboardView onChangeView={setCurrentView} therapist={therapist} />;
-            /*
             case AppView.PATIENTS:
                 return <PatientsList onNavigateToSession={() => setCurrentView(AppView.THERAPY)} />;
             case AppView.AGENDA:
@@ -160,7 +199,6 @@ const TherapistDashboard: React.FC = () => {
                 return <ReportsView />;
             case AppView.SETTINGS:
                 return <SettingsView />;
-            */
             default:
                 return <MainDashboardView onChangeView={setCurrentView} />;
         }
@@ -179,7 +217,7 @@ const TherapistDashboard: React.FC = () => {
 
     return (
         <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
-            {/* <Sidebar
+            <Sidebar
                 isMobileOpen={isMobileOpen}
                 toggleMobile={() => setIsMobileOpen(!isMobileOpen)}
                 isDesktopCollapsed={isDesktopCollapsed}
@@ -192,9 +230,10 @@ const TherapistDashboard: React.FC = () => {
                 isDarkMode={isDarkMode}
                 toggleTheme={toggleTheme}
                 onLogout={handleLogout}
-            /> */}
+                hasAccess={hasAccess}
+            />
 
-            <main className={`flex-1 transition-all duration-300 ease-in-out ${isDesktopCollapsed ? 'md:ml-20' : 'md:ml-0'} overflow-x-hidden`}>
+            <main className={`flex-1 transition-all duration-300 ease-in-out ${isDesktopCollapsed ? 'md:ml-20' : 'md:ml-64'} overflow-x-hidden`}>
                 {/* Mobile Header Spacer */}
                 <div className="md:hidden h-16" />
 
@@ -220,18 +259,18 @@ const TherapistDashboard: React.FC = () => {
                 />
             )}
 
-            {/* <PasswordSetupModal
+            <PasswordSetupModal
                 isOpen={showPasswordSetup}
                 onSuccess={() => setShowPasswordSetup(false)}
-            /> */}
+            />
 
-            {/* <AiAssistant currentView={currentView} /> */}
+            <AiAssistant currentView={currentView} />
 
-            {/* <UpgradeModal
+            <UpgradeModal
                 isOpen={upgradeModal.isOpen}
                 onClose={() => setUpgradeModal({ isOpen: false })}
                 featureName={upgradeModal.featureName}
-            /> */}
+            />
         </div>
     );
 };
