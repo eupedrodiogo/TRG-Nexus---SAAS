@@ -1,8 +1,8 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import pg from 'pg';
+import { createClient } from '@supabase/supabase-js';
 import * as jwt from 'jsonwebtoken';
 
-// Inlined auth utilities to avoid module resolution issues in Vercel Serverless
+// Inlined auth utilities
 const getSecret = () => process.env.SECRET_KEY || 'change-this-secret-in-prod';
 function verifyAuth(req: VercelRequest, res: VercelResponse): { id: string; email: string } | null {
     const auth = req.headers['authorization'];
@@ -21,62 +21,77 @@ function verifyAuth(req: VercelRequest, res: VercelResponse): { id: string; emai
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-    // 1. Verify Auth First
     const user = verifyAuth(req, res);
-    if (!user) return; // verifyAuth handles the error response
+    if (!user) return;
 
-    const { Pool } = pg;
-    const { id } = req.query;
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
 
-    const connectionString = process.env.POSTGRES_URL ? process.env.POSTGRES_URL.replace('?sslmode=require', '?') : undefined;
-
-    if (!connectionString) {
+    if (!supabaseUrl || !supabaseKey) {
         return res.status(500).json({ error: 'Database configuration missing' });
     }
 
-    const pool = new Pool({
-        connectionString,
-        ssl: { rejectUnauthorized: false },
-        connectionTimeoutMillis: 5000,
-    });
-
-    const client = await pool.connect();
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const { id } = req.query;
 
     try {
         if (id) {
-            // Handle operations on a specific patient (PUT, DELETE)
-            // CRITICAL: Ensure the patient belongs to the logged-in therapist
+            const patientId = Array.isArray(id) ? id[0] : id;
             if (req.method === 'PUT') {
                 const { name, email, phone, status, notes } = req.body;
-                const { rows } = await client.query(
-                    'UPDATE patients SET name=$1, email=$2, phone=$3, status=$4, notes=$5 WHERE id=$6 AND therapist_id=$7 RETURNING *',
-                    [name, email, phone, status, notes, id, user.id]
-                );
-                if (rows.length === 0) return res.status(404).json({ error: 'Patient not found or unauthorized' });
-                return res.status(200).json(rows[0]);
-            } else if (req.method === 'DELETE') {
-                const { rowCount } = await client.query('DELETE FROM patients WHERE id=$1 AND therapist_id=$2', [id, user.id]);
-                if (rowCount === 0) return res.status(404).json({ error: 'Patient not found or unauthorized' });
+                const { data, error } = await supabase
+                    .from('patients')
+                    .update({ name, email, phone, status, notes })
+                    .eq('id', patientId)
+                    .eq('therapist_id', user.id) // Ensure ownership
+                    .select()
+                    .single();
+
+                if (error || !data) return res.status(404).json({ error: 'Patient not found or unauthorized' });
+                return res.status(200).json(data);
+            }
+            else if (req.method === 'DELETE') {
+                const { error } = await supabase
+                    .from('patients')
+                    .delete()
+                    .eq('id', patientId)
+                    .eq('therapist_id', user.id); // Ensure ownership
+
+                if (error) throw error;
                 return res.status(200).json({ message: 'Deleted successfully' });
-            } else {
+            }
+            else {
                 res.setHeader('Allow', ['PUT', 'DELETE']);
                 return res.status(405).end(`Method ${req.method} Not Allowed`);
             }
-        } else {
-            // Handle collection operations (GET, POST)
+        }
+        else {
             if (req.method === 'GET') {
-                // FORCE filtering by the logged-in therapist
-                const query = 'SELECT * FROM patients WHERE therapist_id = $1 ORDER BY created_at DESC';
-                const { rows } = await client.query(query, [user.id]);
-                return res.status(200).json(rows);
-            } else if (req.method === 'POST') {
+                // Fetch patients for logged-in therapist
+                const { data, error } = await supabase
+                    .from('patients')
+                    .select('*')
+                    .eq('therapist_id', user.id)
+                    .order('created_at', { ascending: false });
+
+                if (error) throw error;
+                return res.status(200).json(data);
+            }
+            else if (req.method === 'POST') {
                 const { name, email, phone, status, notes } = req.body;
-                const { rows } = await client.query(
-                    'INSERT INTO patients (name, email, phone, status, notes, therapist_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-                    [name, email, phone, status, notes, user.id]
-                );
-                return res.status(201).json(rows[0] as Patient);
-            } else {
+                const { data, error } = await supabase
+                    .from('patients')
+                    .insert([{
+                        name, email, phone, status, notes,
+                        therapist_id: user.id
+                    }])
+                    .select()
+                    .single();
+
+                if (error) throw error;
+                return res.status(201).json(data);
+            }
+            else {
                 res.setHeader('Allow', ['GET', 'POST']);
                 return res.status(405).end(`Method ${req.method} Not Allowed`);
             }
@@ -87,8 +102,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             error: error.message,
             details: error.toString()
         });
-    } finally {
-        client.release();
-        await pool.end();
     }
 }
